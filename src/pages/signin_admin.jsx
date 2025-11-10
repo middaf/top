@@ -147,9 +147,9 @@ const Signin = () => {
                 </div>
             </div>
 
-            <div className="righside">
+            <div className="rightSide">
                 <form onSubmit={handleSubmit}>
-                    <Link href={"/"} className='topsignuplink'><Image src="/topmintLogo.png" alt="logo" width={160} height={40} /></Link>
+                    <Link href={"/"} className='topsignuplink'><Image src="/topmintLogo.png" alt="logo" width={160} height={40} style={{ height: 'auto' }} /></Link>
                     <h1>Admin Sign In</h1>
                     <div className="inputcontainer">
                         <div className="inputCntn">
