@@ -86,6 +86,14 @@ export default function Signin() {
         } catch (fsErr) {
             console.warn('Firestore user lookup failed:', fsErr);
         }
+        
+        // Check if account is suspended
+        if (firestoreUser?.accountStatus === 'suspended') {
+            setErrMsg('Your account has been suspended. Please contact support.');
+            clearErrorSoon();
+            return;
+        }
+        
         const activeUser = {
             name: firestoreUser?.name || authUser.displayName || '',
             email: email.trim().toLowerCase(),

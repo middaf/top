@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { db } from "../../database/firebaseConfig";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 
 const UsersAdmin = ({ activeUsers = [], investments = [], withdrawals = [], setProfileState, setUserData}) => {
   const [searchTerm, setSearchTerm] = useState('');
     const [sortField, setSortField] = useState('date');
     const [sortOrder, setSortOrder] = useState('desc');
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [showSuspendModal, setShowSuspendModal] = useState(false);
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [isProcessing, setIsProcessing] = useState(false);
 
     // Calculate user stats
     const userStats = activeUsers.reduce((stats, user) => {
@@ -21,13 +25,83 @@ const UsersAdmin = ({ activeUsers = [], investments = [], withdrawals = [], setP
     }, { totalUsers: 0, activeUsers: 0, totalBalance: 0, avgInvestment: 0 });
 
     useEffect(() => {
-        activeUsers.forEach(element => {
-            const docRef = doc(db, "userlogs", element?.id);
-            updateDoc(docRef, { authStatus: "seen" });
-        });
-    }, []);
-    
-  const filteredUsers = activeUsers.filter(user => {
+        if (Array.isArray(activeUsers)) {
+            activeUsers.forEach(async(elem) => {
+                try {
+                    const docRef = doc(db, "userlogs", elem.id);
+                    await updateDoc(docRef, {
+                        authStatus: "seen"
+                    })
+                } catch (error) {
+                    console.log(error);
+                }
+            });
+        }
+    }, [activeUsers]);
+
+    // Handle delete user
+    const handleDeleteUser = async () => {
+        if (!selectedUser) return;
+        
+        setIsProcessing(true);
+        try {
+            // Delete user document
+            await deleteDoc(doc(db, "userlogs", selectedUser.id));
+            
+            // Delete related investments
+            const investmentsQuery = query(
+                collection(db, "investments"),
+                where("userId", "==", selectedUser.id)
+            );
+            const investmentDocs = await getDocs(investmentsQuery);
+            investmentDocs.forEach(async (doc) => {
+                await deleteDoc(doc.ref);
+            });
+            
+            // Delete related withdrawals
+            const withdrawalsQuery = query(
+                collection(db, "withdrawals"),
+                where("userId", "==", selectedUser.id)
+            );
+            const withdrawalDocs = await getDocs(withdrawalsQuery);
+            withdrawalDocs.forEach(async (doc) => {
+                await deleteDoc(doc.ref);
+            });
+            
+            alert(`User ${selectedUser.name} has been deleted successfully`);
+            setShowDeleteModal(false);
+            setSelectedUser(null);
+            window.location.reload();
+        } catch (error) {
+            console.error("Error deleting user:", error);
+            alert("Failed to delete user. Please try again.");
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    // Handle suspend/activate user
+    const handleToggleSuspend = async () => {
+        if (!selectedUser) return;
+        
+        setIsProcessing(true);
+        try {
+            const newStatus = selectedUser.accountStatus === "suspended" ? "active" : "suspended";
+            await updateDoc(doc(db, "userlogs", selectedUser.id), {
+                accountStatus: newStatus
+            });
+            
+            alert(`User ${selectedUser.name} has been ${newStatus === "suspended" ? "suspended" : "activated"} successfully`);
+            setShowSuspendModal(false);
+            setSelectedUser(null);
+            window.location.reload();
+        } catch (error) {
+            console.error("Error updating user status:", error);
+            alert("Failed to update user status. Please try again.");
+        } finally {
+            setIsProcessing(false);
+        }
+    };  const filteredUsers = activeUsers.filter(user => {
     return !searchTerm || 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -87,26 +161,77 @@ const UsersAdmin = ({ activeUsers = [], investments = [], withdrawals = [], setP
       {
           activeUsers.length > 0 ? (
               <div className="historyTable">
-                  <div className="investmentTablehead header">
-                      <div className="unitheadsect">S/N</div>
-                      <div className="unitheadsect">Name</div>
-                      <div className="unitheadsect">Email</div>
-                      <div className="unitheadsect">Crptic ID</div>
-                      <div className="unitheadsect">Joined On</div>
-                  </div>
+                                              <thead>
+                                <tr>
+                                    <th>S/N</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Cryptic ID</th>
+                                    <th>Joined On</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
                   {
-                      activeUsers.sort((a, b) => {
-                          const dateA = new Date(a.date);
-                          const dateB = new Date(b.date);
-                        
-                          return dateB - dateA;
-                      }).map((elem, idx) => (
-                          <div className="investmentTablehead" key={`${elem.idnum}-UAdmin_${idx}`} onClick={() => {setUserData(elem); setProfileState("Edit User")}}>
+                      sortedUsers.map((elem, idx) => (
+                          <div className="investmentTablehead" key={`${elem.idnum}-UAdmin_${idx}`}>
                               <div className="unitheadsect">{idx + 1}</div>
-                              <div className="unitheadsect">{elem?.name}</div>
+                              <div className="unitheadsect" onClick={() => {setUserData(elem); setProfileState("Edit User")}} style={{cursor: 'pointer'}}>{elem?.name}</div>
                               <div className="unitheadsect">{elem?.email}</div>
                               <div className="unitheadsect">{elem?.id}</div>
                               <div className="unitheadsect">{new Date(elem?.date).toLocaleDateString("en-US", {day: "numeric", month: "short", year: "numeric", })}</div>
+                              <div className="unitheadsect">
+                                  <span style={{
+                                      padding: '4px 8px',
+                                      borderRadius: '4px',
+                                      fontSize: '12px',
+                                      fontWeight: 'bold',
+                                      backgroundColor: elem.accountStatus === 'suspended' ? '#ffebee' : '#e8f5e9',
+                                      color: elem.accountStatus === 'suspended' ? '#c62828' : '#2e7d32'
+                                  }}>
+                                      {elem.accountStatus === 'suspended' ? 'Suspended' : 'Active'}
+                                  </span>
+                              </div>
+                              <div className="unitheadsect">
+                                  <div style={{display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap'}}>
+                                      <button
+                                          onClick={() => {
+                                              setSelectedUser(elem);
+                                              setShowSuspendModal(true);
+                                          }}
+                                          style={{
+                                              padding: '6px 12px',
+                                              borderRadius: '4px',
+                                              border: 'none',
+                                              cursor: 'pointer',
+                                              fontSize: '12px',
+                                              fontWeight: 'bold',
+                                              backgroundColor: elem.accountStatus === 'suspended' ? '#4caf50' : '#ff9800',
+                                              color: 'white'
+                                          }}
+                                      >
+                                          {elem.accountStatus === 'suspended' ? 'Activate' : 'Suspend'}
+                                      </button>
+                                      <button
+                                          onClick={() => {
+                                              setSelectedUser(elem);
+                                              setShowDeleteModal(true);
+                                          }}
+                                          style={{
+                                              padding: '6px 12px',
+                                              borderRadius: '4px',
+                                              border: 'none',
+                                              cursor: 'pointer',
+                                              fontSize: '12px',
+                                              fontWeight: 'bold',
+                                              backgroundColor: '#f44336',
+                                              color: 'white'
+                                          }}
+                                      >
+                                          Delete
+                                      </button>
+                                  </div>
+                              </div>
                           </div>
                       ))
                   }
@@ -123,6 +248,138 @@ const UsersAdmin = ({ activeUsers = [], investments = [], withdrawals = [], setP
           )
       }
     </div>
+
+    {/* Delete Confirmation Modal */}
+    {showDeleteModal && (
+        <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+        }}>
+            <div style={{
+                backgroundColor: 'white',
+                padding: '24px',
+                borderRadius: '8px',
+                maxWidth: '400px',
+                width: '90%'
+            }}>
+                <h3 style={{marginTop: 0, color: '#333'}}>Confirm Delete</h3>
+                <p style={{color: '#666'}}>
+                    Are you sure you want to delete user <strong>{selectedUser?.name}</strong>? 
+                    This action will permanently delete the user and all their related data (investments, withdrawals, etc.). 
+                    This cannot be undone.
+                </p>
+                <div style={{display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px'}}>
+                    <button
+                        onClick={() => {
+                            setShowDeleteModal(false);
+                            setSelectedUser(null);
+                        }}
+                        disabled={isProcessing}
+                        style={{
+                            padding: '8px 16px',
+                            borderRadius: '4px',
+                            border: '1px solid #ccc',
+                            backgroundColor: 'white',
+                            cursor: isProcessing ? 'not-allowed' : 'pointer',
+                            opacity: isProcessing ? 0.5 : 1
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleDeleteUser}
+                        disabled={isProcessing}
+                        style={{
+                            padding: '8px 16px',
+                            borderRadius: '4px',
+                            border: 'none',
+                            backgroundColor: '#f44336',
+                            color: 'white',
+                            cursor: isProcessing ? 'not-allowed' : 'pointer',
+                            opacity: isProcessing ? 0.5 : 1
+                        }}
+                    >
+                        {isProcessing ? 'Deleting...' : 'Delete User'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
+
+    {/* Suspend/Activate Confirmation Modal */}
+    {showSuspendModal && (
+        <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+        }}>
+            <div style={{
+                backgroundColor: 'white',
+                padding: '24px',
+                borderRadius: '8px',
+                maxWidth: '400px',
+                width: '90%'
+            }}>
+                <h3 style={{marginTop: 0, color: '#333'}}>
+                    Confirm {selectedUser?.accountStatus === 'suspended' ? 'Activation' : 'Suspension'}
+                </h3>
+                <p style={{color: '#666'}}>
+                    Are you sure you want to {selectedUser?.accountStatus === 'suspended' ? 'activate' : 'suspend'} user <strong>{selectedUser?.name}</strong>?
+                    {selectedUser?.accountStatus !== 'suspended' && ' The user will not be able to log in while suspended.'}
+                </p>
+                <div style={{display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px'}}>
+                    <button
+                        onClick={() => {
+                            setShowSuspendModal(false);
+                            setSelectedUser(null);
+                        }}
+                        disabled={isProcessing}
+                        style={{
+                            padding: '8px 16px',
+                            borderRadius: '4px',
+                            border: '1px solid #ccc',
+                            backgroundColor: 'white',
+                            cursor: isProcessing ? 'not-allowed' : 'pointer',
+                            opacity: isProcessing ? 0.5 : 1
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleToggleSuspend}
+                        disabled={isProcessing}
+                        style={{
+                            padding: '8px 16px',
+                            borderRadius: '4px',
+                            border: 'none',
+                            backgroundColor: selectedUser?.accountStatus === 'suspended' ? '#4caf50' : '#ff9800',
+                            color: 'white',
+                            cursor: isProcessing ? 'not-allowed' : 'pointer',
+                            opacity: isProcessing ? 0.5 : 1
+                        }}
+                    >
+                        {isProcessing ? 'Processing...' : (selectedUser?.accountStatus === 'suspended' ? 'Activate User' : 'Suspend User')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
+
   </div>
   )
 }
