@@ -20,35 +20,48 @@ export default function App({ Component, pageProps }) {
   const publicPaths = ['/signin', '/signin_admin', '/signup'];
   const [sessionInterval, setSessionInterval] = useState(null);
 
-  useEffect(() => {
-    // Update last activity and setup session expiry checks
-    const updateActivity = () => {
-      try { localStorage.setItem('lastActivity', Date.now().toString()); } catch (e) { /* ignore */ }
-    };
+    useEffect(() => {
+        let timeoutHandle;
+        
+        // Update last activity and setup session expiry checks
+        const updateActivity = () => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            timeoutHandle = setTimeout(() => {
+                try { localStorage.setItem('lastActivity', Date.now().toString()); } catch (e) { /* ignore */ }
+            }, 1000); // Debounce activity updates
+        };
 
-    const checkSessionExpiry = () => {
-      try {
-        const lastActivity = parseInt(localStorage.getItem('lastActivity') || '0', 10);
-        const now = Date.now();
-        if (lastActivity === 0) {
-          // first run - set activity
-          updateActivity();
-          return true;
-        }
-        if (now - lastActivity > config.sessionTimeout) {
-          localStorage.clear();
-          try { sessionStorage.clear(); } catch (e) { }
-          router.push('/signin');
-          return false;
-        }
-        return true;
-      } catch (e) {
-        console.error('Session expiry check failed:', e);
-        return true;
-      }
-    };
-
-    // attach listeners
+        const checkSessionExpiry = () => {
+            try {
+                const lastActivity = parseInt(localStorage.getItem('lastActivity') || '0', 10);
+                const now = Date.now();
+                if (lastActivity === 0) {
+                    updateActivity();
+                    return true;
+                }
+                
+                // Skip expiry check if we're already on a public path
+                if (publicPaths.includes(router.pathname)) {
+                    return true;
+                }
+                
+                if (now - lastActivity > config.sessionTimeout) {
+                    // Get current path before clearing storage
+                    const currentPath = router.pathname;
+                    localStorage.clear();
+                    try { sessionStorage.clear(); } catch (e) { }
+                    // Only navigate if not already on signin
+                    if (currentPath !== '/signin') {
+                        router.push('/signin?systemRedirect=true');
+                    }
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                console.error('Session expiry check failed:', e);
+                return true;
+            }
+        };    // attach listeners
     window.addEventListener('mousemove', updateActivity);
     window.addEventListener('keypress', updateActivity);
     updateActivity();
@@ -73,14 +86,26 @@ export default function App({ Component, pageProps }) {
       // update activity
       try { localStorage.setItem('lastActivity', Date.now().toString()); } catch (e) {}
 
+      // Check if the current navigation is part of our routing logic to prevent loops
+      const isSystemNavigation = router.asPath.includes('?systemRedirect=true');
+      
+      // Skip route guard checks if we're already doing a system redirect
+      if (isSystemNavigation) return;
+
       if (!publicPaths.includes(path) && !user?.id) {
-        router.push('/signin');
+        // avoid pushing to signin if we're already navigating there
+        if (path !== '/signin') {
+          router.push('/signin?systemRedirect=true');
+        }
         return;
       }
 
       if (publicPaths.includes(path) && user?.id) {
         const dest = user.admin ? '/dashboard_admin' : '/profile';
-        router.push(dest);
+        // only navigate if not already on the destination
+        if (path !== dest) {
+          router.push(`${dest}?systemRedirect=true`);
+        }
       }
     };
 

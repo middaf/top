@@ -27,10 +27,27 @@ function setCacheData(key, data) {
   });
 }
 
+// Generate fallback data for multiple coins
+function generateFallbackData(ids, vs) {
+  const coins = ids.split(',');
+  const result = {};
+  
+  coins.forEach(coin => {
+    const trimmedCoin = coin.trim();
+    result[trimmedCoin] = {
+      [vs]: trimmedCoin === 'bitcoin' ? 95000 : trimmedCoin === 'ethereum' ? 3500 : 1000
+    };
+  });
+  
+  return result;
+}
+
 export default async function handler(req, res) {
   const ids = req.query.ids || req.query.coin || 'bitcoin';
-  const vs = req.query.vs || 'usd';
+  const vs = req.query.vs || req.query.vs_currencies || 'usd';
   const cacheKey = `${ids}-${vs}`;
+
+  console.log('Price API called with:', { ids, vs });
 
   // Set CORS and content headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -40,14 +57,14 @@ export default async function handler(req, res) {
   // Check cache first
   const cachedData = getCachedData(cacheKey);
   if (cachedData) {
+    console.log('Returning cached data:', cachedData);
     return res.status(200).json(cachedData);
   }
 
   // Short-circuit external calls when explicitly disabled (useful in dev/offline)
   if (DISABLE_PRICE_API) {
-    const fallbackData = {
-      [ids]: { [vs]: ids === 'bitcoin' ? 35000 : 2000 }
-    };
+    const fallbackData = generateFallbackData(ids, vs);
+    console.log('Using fallback data (API disabled):', fallbackData);
     res.setHeader('X-Using-Fallback-Data', 'true');
     setCacheData(cacheKey, fallbackData);
     return res.status(200).json(fallbackData);
@@ -78,15 +95,15 @@ export default async function handler(req, res) {
       }
 
       // For other errors, return fallback development values
-      const fallbackData = {
-        [ids]: { [vs]: ids === 'bitcoin' ? 35000 : 2000 }
-      };
+      const fallbackData = generateFallbackData(ids, vs);
+      console.log('Using fallback data (CoinGecko error):', fallbackData);
       setCacheData(cacheKey, fallbackData);
       res.setHeader('X-Using-Fallback-Data', 'true');
       return res.status(200).json(fallbackData);
     }
 
     const data = await cgRes.json();
+    console.log('CoinGecko API response:', data);
     setCacheData(cacheKey, data);
     return res.status(200).json(data);
 
@@ -100,9 +117,8 @@ export default async function handler(req, res) {
     }
 
     // Otherwise return fallback values for development
-    const fallbackData = {
-      [ids]: { [vs]: ids === 'bitcoin' ? 35000 : 2000 }
-    };
+    const fallbackData = generateFallbackData(ids, vs);
+    console.log('Using fallback data (network error):', fallbackData);
     return res.status(200).json(fallbackData);
   }
 }

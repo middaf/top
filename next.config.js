@@ -14,7 +14,12 @@ const nextConfig = {
         permanent: false,
       }
     ]
-  }
+  },
+  optimizeFonts: true,
+  // Temporarily disable CSS optimization
+  experimental: {
+    optimizeCss: false
+  },
 }
 
 module.exports = nextConfig

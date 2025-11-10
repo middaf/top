@@ -3,15 +3,19 @@
   overflow-y: auto;
   padding-right: 15px;
   margin-bottom: 2rem;
+  -webkit-overflow-scrolling: touch;
+  height: calc(100vh - 80px); /* Adjust based on header height */
+  position: relative;
 }
 
 .mainDashboard {
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  height: 100%;
-  overflow-y: auto;
+  min-height: 100%;
   padding-bottom: 2rem;
+  overflow-y: visible;
+  position: relative;
 }
 
 /* Update the packages section to be outside the scroll area */

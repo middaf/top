@@ -1,14 +1,13 @@
 import { Html, Head, Main, NextScript } from 'next/document'
 
 export default function Document() {
-
   return (
     <Html lang='en'>
       <Head>
         <meta charSet="UTF-8"/>
         <meta httpEquiv="X-UA-Compatible" content="IE=edge"/>
         <meta name="theme-color" content='#0672CD'/>
-        <link rel="stylesheet" href="/icofont/icofont.min.css"/>
+  <link rel="stylesheet" href="/icofont/icofont.min.css" />
         <meta name="title" content="Growing your wealth, one investment at a time"></meta>
         <meta name="description" content="Topmint Investment corporation is a trusted paying binary and Cryptocurrency trading company. Earn high returns from our proven trading strategies."></meta>
         <meta name="keywords" content="Coinbase investment, topmint, topmintinvest.com, binary trading, Broker, forex trading, Investment, forex investment, Trusted investment platforms, Egypt investment platforms,  US investment platforms, UK investment platforms, Paying websites, investment websites, trusted investment platform."></meta>
@@ -21,10 +20,45 @@ export default function Document() {
         <link rel="icon" href="/topmintSmall.png"/>
         <link rel="apple-touch-icon" href="/topmintSmall.png"/>
         <meta property="og:image" content="/topmintSmall.png"/>
-        <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  {/* Use React's camelCase prop name to avoid console warning */}
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
-        <link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@100;300;400;500;700;800;900&family=Inter:wght@300;400;500;600;700;800&family=Montserrat:wght@100;200;300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+        <link
+          rel="preload"
+          href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@100;300;400;500;700;800;900&display=swap"
+          as="style"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+          as="style"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          href="https://fonts.googleapis.com/css2?family=Montserrat:wght@100;200;300;400;500;600;700;800&display=swap"
+          as="style"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@100;300;400;500;700;800;900&display=swap"
+          media="print"
+          crossOrigin="anonymous"
+          onLoad="this.media='all'"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+          media="print"
+          crossOrigin="anonymous"
+          onLoad="this.media='all'"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Montserrat:wght@100;200;300;400;500;600;700;800&display=swap"
+          media="print"
+          crossOrigin="anonymous"
+          onLoad="this.media='all'"
+        />
       </Head>
       <body>
         <Main />

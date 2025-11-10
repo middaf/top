@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { db } from '../../database/firebaseConfig';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import styles from './Navbar.module.css';
 
 const Navbar = ({ showsidecard, setShowsideCard, shownavOptions, showDisplayCard }) => {
     const [currentUser, setCurrentUser] = useState({});
@@ -81,8 +82,15 @@ const Navbar = ({ showsidecard, setShowsideCard, shownavOptions, showDisplayCard
   return (
     <nav>
         <div className="leftBox">
-            <Link href={"/"} className="logoCntn">
-                <Image src="/topmintLogo.png" alt="company logo" width={160} height={40} />
+            <Link href={"/"} className={styles.logoCntn}>
+                <Image 
+                    src="/topmintLogo.png" 
+                    alt="company logo" 
+                    width={160} 
+                    height={40}
+                    style={{ height: 'auto', width: 'auto' }}
+                    priority
+                />
             </Link>
         </div>
         {

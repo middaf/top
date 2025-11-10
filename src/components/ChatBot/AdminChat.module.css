@@ -52,13 +52,18 @@
     padding: 14px;
     border-radius: 8px;
     margin-bottom: 12px;
-    background: #ffffff;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .userItem:hover {
     background: #f3f4f6;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-color: #d1d5db;
 }
 
 .userItem strong {
@@ -67,42 +72,6 @@
     color: #1f2937;
     font-size: 1rem;
     font-weight: 600;
-}
-
-.userPreview {
-    color: #6b7280;
-    font-size: 0.9rem;
-}
-
-.userPreview p {
-    margin: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.4;
-    max-width: 230px;
-}
-
-.userPreview .timestamp {
-    font-size: 0.75rem;
-    color: #008069;
-    margin-top: 4px;
-    display: block;
-}
-
-.selectedUser {
-    background: #f0f9ff;
-    border-left: 3px solid #008069;
-}
-
-.chatWindow {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: #efeae2;
-    min-width: 0;
-    position: relative;
-    background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M25 10a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 10a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM25 40a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 40a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM25 70a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 70a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM25 90a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 90a5 5 0 1 0 0-10 5 5 0 0 0 0 10z' fill='rgba(255,255,255,0.1)' fill-rule='evenodd'/%3E%3C/svg%3E");
 }
 
 .chatHeader {
@@ -116,6 +85,82 @@
     min-height: 60px;
 }
 
+.headerContent {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.headerContent h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.headerContent small {
+    color: rgba(255,255,255,0.8);
+    font-size: 0.8rem;
+}
+
+.dashboardButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: none;
+    border: none;
+    color: white;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-right: 8px;
+}
+
+.dashboardButton:hover {
+    background: rgba(255,255,255,0.15);
+}
+
+.userPreview {
+    color: #6b7280;
+    font-size: 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.userPreview p {
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+    max-width: 230px;
+    color: #4b5563;
+}
+
+.userPreview .timestamp {
+    font-size: 0.75rem;
+    color: #008069;
+    display: block;
+}
+
+.selectedUser {
+    background: #f0f9ff;
+    border-left: 3px solid #008069;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.chatWindow {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #efeae2;
+    min-width: 0;
+    position: relative;
+    background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M25 10a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 10a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM25 40a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 40a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM25 70a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 70a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM25 90a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 90a5 5 0 1 0 0-10 5 5 0 0 0 0 10z' fill='rgba(255,255,255,0.1)' fill-rule='evenodd'/%3E%3C/svg%3E");
+}
+
 .backButton {
     background: none;
     color: white;
@@ -125,19 +170,15 @@
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     transition: background-color 0.2s;
     margin-right: 8px;
 }
 
-.backButton:hover, .dashboardButton:hover {
-    background: rgba(255,255,255,0.1);
-}
-
-.dashboardButton {
-    display: flex;
+.backButton:hover {
+    background: rgba(255,255,255,0.15);
 }
 
 .messageList {
@@ -156,6 +197,29 @@
     max-width: 75%;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     position: relative;
+}
+
+.messageHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    font-size: 0.85rem;
+}
+
+.messageHeader strong {
+    color: #1f2937;
+}
+
+.messageHeader .timestamp {
+    color: #6b7280;
+    font-size: 0.75rem;
+}
+
+.messageContent {
+    font-size: 0.95rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
 }
 
 .userMessage {
@@ -196,41 +260,20 @@
     border-bottom: 0;
 }
 
-.messageHeader {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-}
-
-.timestamp {
-    color: #008069;
-    font-size: 0.7rem;
-    font-weight: 500;
-}
-
-.messageContent {
-    white-space: pre-wrap;
-    line-height: 1.5;
-    color: #111827;
-    font-size: 0.95rem;
-    word-break: break-word;
-}
-
 .withdrawalControls {
     display: flex;
-    gap: 10px;
-    margin-top: 10px;
+    gap: 8px;
+    margin-top: 12px;
 }
 
 .generateCodeBtn,
 .denyRequestBtn {
-    padding: 8px 12px;
-    border-radius: 8px;
+    padding: 6px 12px;
     border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
     cursor: pointer;
-    font-weight: 600;
-    transition: background-color 0.2s;
+    transition: all 0.2s;
 }
 
 .generateCodeBtn {
@@ -239,7 +282,7 @@
 }
 
 .generateCodeBtn:hover {
-    background: #006c5a;
+    background: #006854;
 }
 
 .denyRequestBtn {
@@ -252,217 +295,104 @@
 }
 
 .messageInputContainer {
-    padding: 12px 16px;
+    padding: 12px;
     background: #f0f2f5;
     border-top: 1px solid #e5e7eb;
 }
 
 .messageForm {
     display: flex;
-    gap: 10px;
-    align-items: center;
+    gap: 8px;
 }
 
 .messageInput {
     flex: 1;
-    padding: 9px 12px;
-    border-radius: 8px;
+    padding: 8px 12px;
     border: 1px solid #e5e7eb;
+    border-radius: 24px;
+    font-size: 0.95rem;
     background: white;
-    font-size: 15px;
-    color: #111827;
 }
 
 .messageInput:focus {
     outline: none;
     border-color: #008069;
-    box-shadow: 0 0 0 2px rgba(0, 128, 105, 0.1);
 }
 
 .sendButton {
     padding: 8px 16px;
-    border-radius: 8px;
     background: #008069;
     color: white;
     border: none;
+    border-radius: 24px;
+    font-size: 0.95rem;
     cursor: pointer;
     transition: background-color 0.2s;
 }
 
-.sendButton:hover {
-    background: #006c5a;
+.sendButton:hover:not(:disabled) {
+    background: #006854;
 }
 
 .sendButton:disabled {
-    background: #9ca3af;
+    background: #cbd5e0;
     cursor: not-allowed;
-}
-
-.dashboardButton {
-    display: flex;
-}
-
-.backButton {
-    display: none;
-}
-
-/* Base back button styles */
-.chatWindow.visible .backButton {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 8px;
-    font-size: 28px;
-    line-height: 1;
-    color: white;
 }
 
 @media (max-width: 768px) {
     .adminChatContainer {
-        position: fixed;
+        width: 100%;
+        height: 100vh;
         right: 0;
         bottom: 0;
-        width: 100%;
-        max-width: 100%;
-        height: 100vh;
-        margin: 0;
         border-radius: 0;
+        position: fixed;
         overflow: hidden;
-        background: white;
-        z-index: 100;
-    }
-
-    .backButton {
-        display: flex !important;
-        opacity: 1 !important;
-        visibility: visible !important;
     }
 
     .usersList {
-        position: absolute;
-        left: 0;
-        top: 0;
         width: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
         height: 100%;
-        transform: translateX(0);
-        z-index: 20;
-        transition: transform 0.3s ease;
-        border-radius: 12px;
-        background: white;
-    }
-
-    .backButton {
-        display: flex;
+        z-index: 2;
+        transition: transform 0.3s ease-in-out;
+        background: #f9fafb;
     }
 
     .usersList.hidden {
         transform: translateX(-100%);
-    }
-
-    .chatWindow {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        transform: translateX(100%);
-        z-index: 10;
-        transition: transform 0.3s ease;
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .chatWindow.visible {
-        transform: translateX(0);
-    }
-
-    .chatHeader {
-        height: 60px;
-        padding: 0 16px;
-        display: flex;
-        align-items: center;
-    }
-
-    .backButton {
-        display: flex !important;
-    }
-
-    .dashboardButton {
-        display: none !important;
-    }
-
-    .backButton:hover {
-        background: rgba(255,255,255,0.1);
-    }
-
-    .messageList {
-        height: calc(100% - 120px);
-    }
-
-    .messageInputContainer {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: white;
-        padding: 12px;
-        border-top: 1px solid #e5e7eb;
-    }
-}
-
-@media (max-width: 480px) {
-    .adminChatContainer {
-        right: 0;
-        bottom: 0;
-        width: 100%;
-        max-width: 100%;
-        margin: 0;
-        height: 100vh;
-        border-radius: 0;
-    }
-
-    .chatHeader {
-        padding: 0 12px;
-        height: 56px;
-    }
-
-    .message {
-        padding: 8px 10px;
-        max-width: 85%;
     }
 
     .userItem {
-        padding: 12px;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
 
-    .userList {
-        padding: 8px;
+    .userItem:hover,
+    .userItem:active {
+        background: #f3f4f6;
+        border-color: #d1d5db;
     }
 
-    .messageInputContainer {
-        padding: 8px;
-    }
-
-    .dashboardButton {
-        display: none;
-    }
-
-    .backButton {
-        display: flex !important;
-        margin-right: 8px;
-    }
-
-    .usersList.hidden {
-        transform: translateX(-100%);
-    }
-
-    .chatWindow.visible .backButton {
-        display: flex !important;
+    .chatWindow {
+        transform: translateX(100%);
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+        transition: transform 0.3s ease-in-out;
     }
 
     .chatWindow.visible {
         transform: translateX(0);
-        background-color: #efeae2;
-        background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M25 10a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 10a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM25 40a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 40a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM25 70a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 70a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM25 90a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM75 90a5 5 0 1 0 0-10 5 5 0 0 0 0 10z' fill='rgba(255,255,255,0.1)' fill-rule='evenodd'/%3E%3C/svg%3E");
+    }
+
+    .backButton {
+        display: flex !important;
     }
 }

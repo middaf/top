@@ -1,20 +1,21 @@
-// ...existing code...
 import { useState, useRef, useEffect, useContext } from 'react';
 import { motion } from "framer-motion";
 import Link from 'next/link';
 import Image from 'next/image';
 import app, { db } from '../database/firebaseConfig';
-import { collection, getDocs, addDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { themeContext } from '../../providers/ThemeProvider';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import { config, validatePassword } from '../utils/config';
 
 const Signup = () => {
   const [passwordShow, setPasswordShow] = useState(false);
   const [users, setUsers] = useState([]);
   const [errMsg, setErrMsg] = useState("");
   const [verify, setVerify] = useState("Default");
+  const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef(null);
 
   const router = useRouter();
@@ -87,73 +88,92 @@ const Signup = () => {
     e.preventDefault();
     const form = e.target;
 
-    // Validate inputs
-    if (!toLocaleStorage.email?.includes('@')) {
-      setErrMsg(config.errorMessages.invalidEmail);
-      removeErr();
-      return;
-    }
-
-    if (!validatePassword(toLocaleStorage.password)) {
-      setErrMsg(config.errorMessages.weakPassword);
-      removeErr();
-      return;
-    }
-
-    // Programmatic validation for simulated verification
-    if (!inputRef.current?.checked) {
-      setErrMsg(config.errorMessages.verificationNeeded);
-      removeErr();
-      return;
-    }
-
-    // Terms checkbox (name="checkbox")
-    const termsChecked = form.elements['checkbox']?.checked;
-    if (!termsChecked) {
-      setErrMsg("You must agree to the terms and conditions.");
-      removeErr();
-      return;
-    }
-
-    // Check for existing account by email
-    const alreadyExist = users.find(elem => elem.email === toLocaleStorage.email);
-    if (alreadyExist) {
-      setErrMsg("An account already exists with this email. Try logging in.");
-      removeErr();
-      return;
-    }
-
     try {
-      // Build notification using current idnum
-      const notificationPush = {
-        message: "You just received $50 sign up bonus",
-        dateTime: new Date().toISOString(),
-        idnum: toLocaleStorage.idnum,
-        status: "unseen"
-      };
+      setIsLoading(true); // Set loading state at start
+
+      // Validate inputs
+      if (!toLocaleStorage.email?.includes('@')) {
+        throw new Error(config.errorMessages.invalidEmail);
+      }
+
+      if (!validatePassword(toLocaleStorage.password)) {
+        throw new Error(config.errorMessages.weakPassword);
+      }
+
+      // Programmatic validation for simulated verification
+      if (!inputRef.current?.checked || verify !== "verified") {
+        throw new Error(config.errorMessages.verificationNeeded);
+      }
+
+      // Terms checkbox (name="checkbox")
+      const termsChecked = form.elements['checkbox']?.checked;
+      if (!termsChecked) {
+        throw new Error("You must agree to the terms and conditions.");
+      }
+
+        // Check for existing account by email
+      const alreadyExist = users.find(elem => elem.email === toLocaleStorage.email);
+      if (alreadyExist) {
+        throw new Error("An account already exists with this email. Try logging in.");
+      }
+      // Validate required fields
+      if (!toLocaleStorage.name?.trim()) {
+        throw new Error("Please enter your full name");
+      }
+
+      // Check for existing account by email one more time (in case of race condition)
+      const emailQuery = query(colRef, where("email", "==", toLocaleStorage.email));
+      const emailSnapshot = await getDocs(emailQuery);
+      if (!emailSnapshot.empty) {
+        setErrMsg(config.errorMessages.emailInUse);
+        removeErr();
+        return;
+      }
 
       // Create Firebase Auth user first
       const auth = getAuth(app);
       const userCredential = await createUserWithEmailAndPassword(auth, toLocaleStorage.email, toLocaleStorage.password);
       const createdUser = userCredential.user;
 
+      // Ensure generated idnum is unique among existing users
+      let candidateId = toLocaleStorage.idnum || generatePassword();
+      while (users.some(u => String(u.idnum) === String(candidateId))) {
+        candidateId = generatePassword();
+      }
+      // Persist the resolved id back to local state
+      if (candidateId !== toLocaleStorage.idnum) {
+        setToLocalStorage(prev => ({ ...prev, idnum: candidateId }));
+      }
+
+      // Build notification for sign up bonus
+      const notificationPush = {
+        message: "You just received $50 sign up bonus",
+        dateTime: new Date().toISOString(),
+        idnum: candidateId,
+        status: "unseen",
+        type: "signup_bonus"
+      };
+
       // Prepare Firestore user doc (don't store plaintext password)
       const userDoc = {
         ...toLocaleStorage,
+        idnum: candidateId,
         uid: createdUser.uid,
+        email: createdUser.email, // Use email from Firebase Auth
         password: "******",
-        dateCreated: new Date().toISOString()
+        dateCreated: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
       };
 
       // Save notification and user document
       await addDoc(colRefNotif, notificationPush);
       const userRef = await addDoc(colRef, userDoc);
 
-      // Persist active user (mask password) in localStorage
-      localStorage.setItem(
-        "activeUser",
-        JSON.stringify({ ...userDoc, id: userRef.id })
-      );
+      // Store user data safely (no password) in localStorage
+      const safeUserData = { ...userDoc, id: userRef.id };
+      delete safeUserData.password;
+  localStorage.setItem("activeUser", JSON.stringify(safeUserData));
+  try { sessionStorage.setItem("activeUser", JSON.stringify(safeUserData)); } catch (e) { /* ignore */ }
 
       // Reset form state
       form.reset();
@@ -163,13 +183,42 @@ const Signup = () => {
       // Redirect
       router.push(registerFromPath || "/");
     } catch (err) {
-      console.error(err);
-      // Friendly error for common Firebase errors
-      const message = err?.code === 'auth/email-already-in-use'
-        ? 'An account already exists with this email. Try logging in.'
-        : (err.message || 'Failed to create account. Try again.');
+      console.error('Signup error:', err);
+      let message;
+      
+      if (err.message) {
+        // Use validation error messages directly
+        message = err.message;
+      } else {
+        // Handle Firebase Auth errors
+        switch(err?.code) {
+          case 'auth/email-already-in-use':
+            message = config.errorMessages.emailInUse;
+            break;
+          case 'auth/invalid-email':
+            message = config.errorMessages.invalidEmail;
+            break;
+          case 'auth/weak-password':
+            message = config.errorMessages.weakPassword;
+            break;
+          case 'auth/network-request-failed':
+            message = 'Network error. Please check your internet connection.';
+            break;
+          default:
+            message = config.errorMessages.serverError;
+        }
+      }
+      
       setErrMsg(message);
       removeErr();
+
+      // Reset verification state on error
+      setVerify("Default");
+      if (inputRef.current) {
+        inputRef.current.checked = false;
+      }
+    } finally {
+      setIsLoading(false); // Always clear loading state
     }
   };
 
@@ -178,6 +227,8 @@ const Signup = () => {
       <Head>
         <title>Sign up</title>
         <meta property="og:title" content="Sign up"/>
+        <link rel="icon" href="/topmintSmall.png" />
+        <link rel="shortcut icon" href="/topmintSmall.png" />
       </Head>
 
       <div className="leftSide">
@@ -188,9 +239,9 @@ const Signup = () => {
         </div>
       </div>
 
-      <div className="righside">
+      <div className="rightSide">
         <form onSubmit={handleSubmit}>
-          <Link href={"/"} className='topsignuplink'><Image src="/topmintLogo.png" alt="logo" width={160} height={40} /></Link>
+          <Link href={"/"} className='topsignuplink'><Image src="/topmintLogo.png" alt="logo" width={160} height={40} style={{ height: 'auto' }} /></Link>
           <h1>Sign Up with Email</h1>
           <div className="inputcontainer">
             <div className="inputCntn">
@@ -230,7 +281,7 @@ const Signup = () => {
                 </div>
               </div>
               <div className="service_provider">
-                <p>Protected by <img src="/cloudflare.png" alt="cloudflare" /></p>
+                <p>Protected by <img src="/cloudflare.png" alt="cloudflare" style={{ height: 'auto' }} /></p>
               </div>
             </div>
 
@@ -241,7 +292,24 @@ const Signup = () => {
               I agree to all terms and conditions of Topmint Invesment Incorp.
             </label>
 
-            <button type="submit" className='fancyBtn'>Create an Account</button>
+            <button 
+              type="submit" 
+              className={`fancyBtn ${isLoading ? 'loading' : ''}`}
+              style={{
+                opacity: (isLoading || verify !== "verified") ? 0.6 : 1,
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                pointerEvents: isLoading ? 'none' : 'auto'
+              }}
+            >
+              {isLoading ? (
+                <span>
+                  <i className="icofont-spinner-alt-2 spinning" style={{ marginRight: '8px' }}></i>
+                  Creating Account...
+                </span>
+              ) : (
+                <span>Create an Account</span>
+              )}
+            </button>
           </div>
           <p className='haveanaccount'>Have an account? <Link href={"/signin"}>Sign In</Link></p>
         </form>
@@ -251,4 +319,3 @@ const Signup = () => {
 };
 
 export default Signup;
-// ...existing code...

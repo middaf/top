@@ -28,18 +28,18 @@ export default function AdminChat() {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    const [showChatWindow, setShowChatWindow] = useState(false);
+
     const handleUserSelect = (userId) => {
         setSelectedUser(userId);
         if (isMobileView) {
-            document.querySelector(`.${styles.usersList}`).classList.add(styles.hidden);
-            document.querySelector(`.${styles.chatWindow}`).classList.add(styles.visible);
+            setShowChatWindow(true);
         }
     };
 
     const handleBackClick = () => {
         if (isMobileView) {
-            document.querySelector(`.${styles.usersList}`).classList.remove(styles.hidden);
-            document.querySelector(`.${styles.chatWindow}`).classList.remove(styles.visible);
+            setShowChatWindow(false);
         }
     };
 
@@ -110,8 +110,15 @@ export default function AdminChat() {
 
     const generateWithdrawalCode = async (userId, amount) => {
         try {
-            if (!userId || !amount || amount <= 0) {
+            const numericAmount = Number.parseFloat(amount);
+            if (!userId || isNaN(numericAmount) || numericAmount <= 0) {
                 throw new Error('Invalid user ID or amount');
+            }
+
+            // Enforce minimum withdrawal amount of $200 for admin-generated codes
+            if (numericAmount < 200) {
+                alert('Minimum withdrawal amount for code generation is $200');
+                return;
             }
 
             // Generate a cryptographically secure random code (6 digits)
@@ -235,16 +242,19 @@ export default function AdminChat() {
 
     return (
         <div className={styles.adminChatContainer}>
-            <div className={styles.usersList}>
+            <div className={`${styles.usersList} ${showChatWindow ? styles.hidden : ''}`}>
                 <div className={styles.chatHeader}>
                     <button 
                         onClick={handleDashboardClick}
                         className={styles.dashboardButton}
                         aria-label="Back to Dashboard"
                     >
-                        ‹
+                        <span style={{ fontSize: '28px', lineHeight: 1 }}>‹</span>
                     </button>
-                    <h3>Active Chats</h3>
+                    <div className={styles.headerContent}>
+                        <h3>Active Chats</h3>
+                        <small>{users.length} active conversations</small>
+                    </div>
                 </div>
                 <div className={styles.userList}>
                     {users.map((user) => (
@@ -264,7 +274,7 @@ export default function AdminChat() {
                     ))}
                 </div>
             </div>
-            <div className={`${styles.chatWindow} ${selectedUser && isMobileView ? styles.visible : ''}`}>
+            <div className={`${styles.chatWindow} ${showChatWindow ? styles.visible : ''}`}>
                 <div className={styles.chatHeader}>
                     {isMobileView && (
                         <button 

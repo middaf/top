@@ -38,8 +38,8 @@ import Head from "next/head";
 const Profile = () => {
   const [passwordShow, setPasswordShow] = useState(true);
   const [profilestate, setProfileState] = useState("Dashboard");
-  const [bitPrice, setBitPrice] = useState("");
-  const [ethPrice, setEthPrice] = useState("");
+  const [bitPrice, setBitPrice] = useState(0);
+  const [ethPrice, setEthPrice] = useState(0);
   const [investments, setInvestments] = useState([]);
   const handleLogOut = () => {
     localStorage.clear();
@@ -145,18 +145,33 @@ const Profile = () => {
       }
 
       const data = await response.json();
+      console.log('Price API Response:', data);
+      
       // If caller asks for bit price or eth price, set appropriately
       if (stateSetter === setBitPrice) {
-        stateSetter(data.bitcoin?.usd || 0);
+        const price = data.bitcoin?.usd || 0;
+        console.log('Setting BTC Price:', price);
+        stateSetter(price);
       } else if (stateSetter === setEthPrice) {
-        stateSetter(data.ethereum?.usd || 0);
+        const price = data.ethereum?.usd || 0;
+        console.log('Setting ETH Price:', price);
+        stateSetter(price);
       } else {
         // fallback: if called generically, set both when possible
-        if (data.bitcoin?.usd) setBitPrice(data.bitcoin.usd);
-        if (data.ethereum?.usd) setEthPrice(data.ethereum.usd);
+        if (data.bitcoin?.usd) {
+          console.log('Setting BTC Price (generic):', data.bitcoin.usd);
+          setBitPrice(data.bitcoin.usd);
+        }
+        if (data.ethereum?.usd) {
+          console.log('Setting ETH Price (generic):', data.ethereum.usd);
+          setEthPrice(data.ethereum.usd);
+        }
       }
     } catch (error) {
-      console.error("Error fetching data:", error.message);
+      console.error("Error fetching price data:", error.message);
+      // Set fallback prices on error
+      setBitPrice(95000);
+      setEthPrice(3500);
     }
   }
 
@@ -248,9 +263,16 @@ const Profile = () => {
     }, 0);
 
   useEffect(() => {
-    fetchData("CRYPTO", setBitPrice);
-    fetchData("CRYPTO", setEthPrice);
+    // Fetch both prices at once
+    fetchData(null, null);
   }, []);
+
+  // Debug: Log whenever prices change
+  useEffect(() => {
+    console.log('=== PRICES UPDATED ===');
+    console.log('BTC Price:', bitPrice, '(type:', typeof bitPrice, ')');
+    console.log('ETH Price:', ethPrice, '(type:', typeof ethPrice, ')');
+  }, [bitPrice, ethPrice]);
 
   //Animation variable
   const swipeParent = {
@@ -286,10 +308,11 @@ const Profile = () => {
           <title>User Dashboard</title>
           <meta property="og:title" content="User Dashboard"/>
       </Head>
+      
       <div id="mobilenone" className="leftProfile">
         <div className="topmostRightPrile">
           <Link href={"/"}>
-            <Image src="/topmintLogo.png" className="theLogo" alt="logo" width={160} height={40} />
+            <Image src="/topmintLogo.png" className="theLogo" alt="logo" width={160} height={40} style={{ height: 'auto' }} />
           </Link>
           <div className="panelPrfileDisp">
             <div
@@ -502,6 +525,8 @@ const Profile = () => {
             totalBonus={totalBonus}
             totalCapital={totalCapital}
             totalROI={totalROI}
+            setProfileState={setProfileState}
+            setWithdrawData={setWithdrawData}
           />
         )}
         {profilestate === "Payments" && (
@@ -540,7 +565,7 @@ const Profile = () => {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <img src="/cloudflare.png" alt="cloudflare" />
+              <img src="/cloudflare.png" alt="cloudflare" style={{ height: 'auto' }} />
             </a>
           </p>
         </footer>

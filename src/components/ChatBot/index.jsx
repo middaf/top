@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { db } from '../../database/firebaseConfig';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, where } from 'firebase/firestore';
 import styles from './ChatBot.module.css';
 
 function ChatBot() {
@@ -9,29 +9,66 @@ function ChatBot() {
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [highlightedOption, setHighlightedOption] = useState(null);
+    const messagesEndRef = useRef(null);
+
+    // Function to scroll to the bottom of messages
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    // Derive a stable activeId from storage so we can re-subscribe when the logged
+    // in user changes while the chat widget is open. Reading storage here keeps
+    // the component responsive to changes from sign-in / sign-out flows.
+    let _active = {};
+    try { _active = JSON.parse(sessionStorage.getItem('activeUser') || localStorage.getItem('activeUser') || '{}'); } catch (e) { _active = {}; }
+    const activeId = _active?.idnum || _active?.uid || _active?.id || null;
 
     useEffect(() => {
-        if (isOpen) {
-            // Subscribe to messages when chat is open
-            const q = query(
-                collection(db, 'chats'),
-                orderBy('timestamp', 'asc')
-            );
+        if (!isOpen) return undefined;
 
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-                const newMessages = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    text: doc.data().message,
-                    sender: doc.data().isAdmin ? 'bot' : 'user'
-                }));
-                setMessages(newMessages);
-            });
-
-            // Cleanup subscription on unmount
-            return () => unsubscribe();
+        // If we don't have an active id, don't subscribe to global chats
+        if (!activeId) {
+            setMessages([]);
+            return undefined;
         }
-    }, [isOpen]);
+
+        // Query only for the current user's chats to preserve privacy.
+        // Create a query that will work with the composite index
+        const chatRef = collection(db, 'chats');
+        const q = activeId ? query(
+            chatRef,
+            where('userId', '==', activeId),
+            orderBy('timestamp', 'asc'),
+            orderBy('__name__', 'asc') // Add name ordering to match the index
+        ) : query(chatRef, orderBy('timestamp', 'asc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const newMessages = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                text: doc.data().message,
+                sender: doc.data().isAdmin ? 'bot' : 'user'
+            }));
+            setMessages(newMessages);
+            // Scroll to bottom when new messages arrive
+            setTimeout(scrollToBottom, 100);
+        }, (err) => {
+            // Minimal error logging to help debug subscription / permission issues
+            console.error('Chat subscription error:', err);
+        });
+
+        // Cleanup subscription on unmount or when activeId/isOpen changes
+        return () => {
+            try { unsubscribe && unsubscribe(); } catch (e) { /* ignore cleanup errors */ }
+        };
+    }, [isOpen, activeId]);
+
+    // Scroll to bottom when chat opens or messages change
+    useEffect(() => {
+        if (isOpen && messages.length > 0) {
+            scrollToBottom();
+        }
+    }, [isOpen, messages.length]);
 
     // Listen for global open event dispatched from other parts of the app
     useEffect(() => {
@@ -135,6 +172,7 @@ function ChatBot() {
                                 {msg.text}
                             </div>
                         ))}
+                        <div ref={messagesEndRef} />
                     </div>
 
                     {/* quick suggestions / highlighted action */}
