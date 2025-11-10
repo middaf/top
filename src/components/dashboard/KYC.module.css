@@ -16,7 +16,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--main);
+  background: var(--primary-clr);
   opacity: 0.3;
 }
 
@@ -26,7 +26,7 @@
 }
 
 .kycForm {
-  background: var(--lightBG);
+  background: #ffffff;
   border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
@@ -40,7 +40,7 @@
   display: block;
   font-weight: 500;
   margin-bottom: 0.5rem;
-  color: var(--text);
+  color: #333;
 }
 
 .formGroup select,
@@ -88,7 +88,7 @@
 }
 
 .fileInput:hover .uploadBox {
-  border-color: var(--main);
+  border-color: var(--primary-clr);
 }
 
 .filePreview {
@@ -103,7 +103,7 @@
 
 .filePreview i {
   font-size: 24px;
-  color: var(--main);
+  color: var(--primary-clr);
 }
 
 .statusBox {
@@ -134,7 +134,7 @@
   padding: 1rem;
   border: none;
   border-radius: 8px;
-  background: var(--main);
+  background: var(--primary-clr);
   color: white;
   font-weight: 500;
   cursor: pointer;
@@ -142,7 +142,7 @@
 }
 
 .submitButton:hover:not(:disabled) {
-  background: var(--mainHover);
+  background: #0556a3;
 }
 
 .submitButton:disabled {

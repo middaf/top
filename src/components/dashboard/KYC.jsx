@@ -196,7 +196,7 @@ export default function KYC({ currentUser }) {
                 <button 
                   type="button" 
                   className={styles.submitButton} 
-                  style={{ background: 'var(--text)' }}
+                  style={{ background: '#6c757d' }}
                   onClick={prevStep}
                 >
                   Back
