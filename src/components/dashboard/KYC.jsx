@@ -99,7 +99,7 @@ export default function KYC({ currentUser }) {
 
   return (
     <div className="investmentMainCntn">
-      <div className="overviewSection">
+      <div className={styles.overviewSection}>
         <h2>KYC & Verification</h2>
       </div>
 

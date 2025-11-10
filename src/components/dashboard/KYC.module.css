@@ -161,3 +161,58 @@
   font-size: 0.875rem;
   margin-top: 0.25rem;
 }
+
+/* Ensure the overview section is styled */
+.overviewSection {
+  display: block;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.overviewSection h2 {
+  margin: 0;
+  padding: 0;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .kycContainer {
+    padding: 10px;
+    margin: 0;
+    max-width: 100%;
+    width: 100%;
+  }
+  
+  .kycForm {
+    padding: 1rem;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  .formGroup {
+    margin-bottom: 1rem;
+  }
+  
+  .formGroup input,
+  .formGroup select {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  .fileInput .uploadBox {
+    padding: 1.5rem 1rem;
+  }
+  
+  .submitButton {
+    padding: 0.875rem;
+    font-size: 0.9rem;
+    width: 100%;
+  }
+  
+  .overviewSection h2 {
+    font-size: 1.25rem;
+  }
+}
