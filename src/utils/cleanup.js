@@ -1,25 +1,28 @@
-import { collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
-import { db } from '../database/firebaseConfig';
+import { supabase } from '../database/supabaseConfig';
 import { config } from './config';
 
 export async function cleanupExpiredCodes() {
   try {
-    const now = new Date();
-    const codesRef = collection(db, 'withdrawalCodes');
-    const expiredQuery = query(codesRef, where('expiresAt', '<=', now));
-    const snapshot = await getDocs(expiredQuery);
+    const now = new Date().toISOString();
+    const { data: expiredCodes, error } = await supabase
+      .from('withdrawal_codes')
+      .select('id')
+      .lte('expires_at', now);
 
-    if (snapshot.empty) return;
+    if (error) throw error;
+    if (!expiredCodes || expiredCodes.length === 0) return;
 
-    // Batch delete expired codes
-    const batch = writeBatch(db);
-    snapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
-    await batch.commit();
+    // Delete expired codes
+    const ids = expiredCodes.map(code => code.id);
+    const { error: deleteError } = await supabase
+      .from('withdrawal_codes')
+      .delete()
+      .in('id', ids);
+
+    if (deleteError) throw deleteError;
 
     if (process.env.NODE_ENV === 'development') {
-      console.log(`Cleaned up ${snapshot.size} expired withdrawal codes`);
+      console.log(`Cleaned up ${expiredCodes.length} expired withdrawal codes`);
     }
   } catch (error) {
     console.error('Error cleaning up withdrawal codes:', error);
@@ -29,25 +32,20 @@ export async function cleanupExpiredCodes() {
 // Add notification for expired codes
 export async function notifyExpiredCodes() {
   try {
-    const now = new Date();
-    const codesRef = collection(db, 'withdrawalCodes');
-    const expiredQuery = query(codesRef, 
-      where('expiresAt', '<=', now),
-      where('notifiedExpiry', '==', false)
-    );
-    const snapshot = await getDocs(expiredQuery);
+    const now = new Date().toISOString();
+    const { data: expiredCodes, error } = await supabase
+      .from('withdrawal_codes')
+      .select('*')
+      .lte('expires_at', now)
+      .eq('notified_expiry', false);
 
-    if (snapshot.empty) return;
+    if (error) throw error;
+    if (!expiredCodes || expiredCodes.length === 0) return;
 
-    const batch = writeBatch(db);
-    const notificationsRef = collection(db, 'notifications');
-
-    for (const doc of snapshot.docs) {
-      const code = doc.data();
-      
+    for (const code of expiredCodes) {
       // Create expiry notification
       const notification = {
-        userId: code.userId,
+        user_id: code.user_id,
         type: 'withdrawal_code_expired',
         title: 'Withdrawal Code Expired',
         message: `Your withdrawal code for $${parseFloat(code.amount).toLocaleString()} has expired. Please request a new code if needed.`,

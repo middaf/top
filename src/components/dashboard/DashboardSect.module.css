@@ -1,3 +1,45 @@
+.widgetInvestForm {
+  display: flex;
+  flex-direction: column;
+}
+
+.withdraw-code-form {
+  width: 100%;
+}
+
+.withdraw-code-grid {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.withdraw-code-input {
+  width: 48px;
+  height: 56px;
+  font-size: 1.6rem;
+  text-align: center;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  outline: none;
+  transition: all 0.2s;
+  font-weight: 700;
+  background-color: #fff;
+  color: #333;
+}
+
+@media (max-width: 480px) {
+  .withdraw-code-grid {
+    gap: 6px;
+  }
+
+  .withdraw-code-input {
+    width: 42px;
+    height: 52px;
+    font-size: 1.4rem;
+  }
+}
 .packages {
   padding: 2rem 0;
   margin: 0 auto 2rem;

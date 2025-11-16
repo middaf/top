@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { db, storage } from '../../database/firebaseConfig';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase, supabaseDb, supabaseStorage } from '../../database/supabaseUtils';
+import { supabase as supabaseClient } from '../../database/supabaseConfig';
 import styles from './KYC.module.css';
 
 export default function KYC({ currentUser }) {
@@ -15,32 +14,90 @@ export default function KYC({ currentUser }) {
   const [dragActive, setDragActive] = useState({ id: false, selfie: false });
   const [uploadStatus, setUploadStatus] = useState('');
 
+  // Use refs for file inputs
+  const idFileInputRef = useRef(null);
+  const selfieFileInputRef = useRef(null);
+
+  // Debug currentUser prop
+  useEffect(() => {
+    console.log('=== KYC COMPONENT DEBUG ===');
+    console.log('currentUser prop:', currentUser);
+    console.log('currentUser.id:', currentUser?.id);
+    console.log('currentUser.idnum:', currentUser?.idnum);
+    console.log('currentUser.email:', currentUser?.email);
+  }, [currentUser]);
+
   useEffect(() => {
     const fetchKycStatus = async () => {
       if (!currentUser?.id) return;
-      const userRef = doc(db, 'userlogs', currentUser.id);
-      const userDoc = await getDoc(userRef);
-      if (userDoc.exists()) {
-        setKycStatus(userDoc.data().kycStatus || '');
+      
+      // Get KYC records for this user
+      const { data, error } = await supabaseDb.getKYCByUserId(currentUser.id);
+      if (!error && data && data.length > 0) {
+        // Set status based on the latest KYC submission
+        const latestKyc = data[0];
+        setKycStatus(latestKyc.status || 'pending');
+      } else {
+        setKycStatus('pending');
       }
     };
+    
     fetchKycStatus();
+
+    // Set up real-time subscription for KYC status changes
+    let subscription = null;
+    if (currentUser?.id) {
+      subscription = supabaseClient
+        .channel('user-kyc-changes')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'kyc',
+          filter: `user_id=eq.${currentUser.id}`
+        }, (payload) => {
+          console.log('KYC status change:', payload);
+          if (payload.new) {
+            setKycStatus(payload.new.status || 'pending');
+          } else if (payload.eventType === 'DELETE') {
+            setKycStatus('pending');
+          }
+        })
+        .subscribe();
+    }
+
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
   }, [currentUser]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Prevent double submission
     if (submitting) {
       console.log('Already submitting, ignoring duplicate submission');
       return;
     }
-    
-    // Validation checks
-    if (!currentUser?.id) {
-      alert('User not authenticated');
+
+    // Enhanced authentication check
+    if (!currentUser) {
+      alert('No user data found. Please refresh the page and try again.');
       return;
     }
+
+    if (!currentUser.id && !currentUser.idnum) {
+      alert('User authentication incomplete. Please sign in again.');
+      return;
+    }
+
+    // Use idnum as fallback if id is missing
+    const userId = currentUser.id || currentUser.idnum;
+    if (!userId) {
+      alert('User ID not found. Please contact support.');
+      return;
+    }
+
+    console.log('Using user ID for upload:', userId);
     
     if (!idNumber.trim()) {
       alert('Please enter ID number');
@@ -79,46 +136,66 @@ export default function KYC({ currentUser }) {
       console.log('Uploading ID document...');
       setUploadStatus('Uploading ID document...');
       if (idFile) {
-        const path = `kyc/${currentUser.id}/id_${Date.now()}_${idFile.name}`;
-        const idRef = ref(storage, path);
-        await uploadBytes(idRef, idFile);
-        uploaded.idUrl = await getDownloadURL(idRef);
-        console.log('ID document uploaded successfully');
+        console.log('ID file details:', {
+          name: idFile.name,
+          size: idFile.size,
+          type: idFile.type,
+          lastModified: idFile.lastModified
+        });
+
+        const path = `kyc/${userId}/id_${Date.now()}_${idFile.name}`;
+        console.log('Upload path:', path);
+
+        const { data, error } = await supabaseStorage.uploadFile('kyc-documents', path, idFile);
+        if (error) throw error;
+        uploaded.idUrl = supabaseStorage.getPublicUrl('kyc-documents', path);
+        console.log('ID document uploaded successfully, URL:', uploaded.idUrl);
       }
-      
+
       console.log('Uploading selfie...');
       setUploadStatus('Uploading selfie...');
       if (selfieFile) {
-        const path = `kyc/${currentUser.id}/selfie_${Date.now()}_${selfieFile.name}`;
-        const selfieRef = ref(storage, path);
-        await uploadBytes(selfieRef, selfieFile);
-        uploaded.selfieUrl = await getDownloadURL(selfieRef);
-        console.log('Selfie uploaded successfully');
+        console.log('Selfie file details:', {
+          name: selfieFile.name,
+          size: selfieFile.size,
+          type: selfieFile.type,
+          lastModified: selfieFile.lastModified
+        });
+
+        const path = `kyc/${userId}/selfie_${Date.now()}_${selfieFile.name}`;
+        console.log('Upload path:', path);
+
+        const { data, error } = await supabaseStorage.uploadFile('kyc-documents', path, selfieFile);
+        if (error) throw error;
+        uploaded.selfieUrl = supabaseStorage.getPublicUrl('kyc-documents', path);
+        console.log('Selfie uploaded successfully, URL:', uploaded.selfieUrl);
       }
 
       console.log('Creating KYC record...');
       setUploadStatus('Saving to database...');
       // Create kyc record
-      await addDoc(collection(db, 'kyc'), {
-        userId: currentUser.id,
+      const kycData = {
+        user_id: userId,
         idnum: currentUser.idnum || '',
-        userName: currentUser.name || '',
-        idType,
-        idNumber: idNumber.trim(),
-        idUrl: uploaded.idUrl || null,
-        selfieUrl: uploaded.selfieUrl || null,
-        status: 'Pending',
-        submittedAt: serverTimestamp(),
-      });
+        user_name: currentUser.name || '',
+        id_type: idType,
+        id_number: idNumber.trim(),
+        id_url: uploaded.idUrl || null,
+        selfie_url: uploaded.selfieUrl || null,
+        status: 'pending'
+      };
+
+      const { data: kycRecord, error: kycError } = await supabaseDb.createKYC(kycData);
+      if (kycError) throw kycError;
       console.log('KYC record created successfully');
 
       console.log('Updating user document...');
       // Update user doc kycStatus
-      const userRef = doc(db, 'userlogs', currentUser.id);
-      await updateDoc(userRef, { 
-        kycStatus: 'Pending', 
-        kycSubmittedAt: serverTimestamp() 
+      const { data: updatedUser, error: userError } = await supabaseDb.updateUser(userId, {
+        kyc_status: 'pending',
+        kyc_submitted_at: new Date().toISOString()
       });
+      if (userError) throw userError;
       console.log('User document updated successfully');
 
       clearTimeout(timeoutId);
@@ -264,7 +341,7 @@ export default function KYC({ currentUser }) {
                   <div className={styles.fileInput}>
                     <div 
                       className={`${styles.uploadBox} ${dragActive.id ? styles.dragActive : ''}`}
-                      onClick={() => document.getElementById('idFileInput').click()}
+                      onClick={() => idFileInputRef.current?.click()}
                       onDrag={handleDrag}
                       onDragStart={handleDrag}
                       onDragEnd={handleDrag}
@@ -277,10 +354,14 @@ export default function KYC({ currentUser }) {
                       <p>Drop your ID document here or click to browse</p>
                     </div>
                     <input 
-                      id="idFileInput"
+                      ref={idFileInputRef}
                       type="file" 
                       accept="image/*,.pdf" 
-                      onChange={(e) => setIdFile(e.target.files[0])} 
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        console.log('ID file selected:', file?.name, file?.size, file?.type);
+                        setIdFile(file);
+                      }} 
                       style={{ display: 'none' }}
                     />
                   </div>
@@ -298,7 +379,7 @@ export default function KYC({ currentUser }) {
                   <div className={styles.fileInput}>
                     <div 
                       className={`${styles.uploadBox} ${dragActive.selfie ? styles.dragActive : ''}`}
-                      onClick={() => document.getElementById('selfieFileInput').click()}
+                      onClick={() => selfieFileInputRef.current?.click()}
                       onDrag={handleDrag}
                       onDragStart={handleDrag}
                       onDragEnd={handleDrag}
@@ -311,10 +392,14 @@ export default function KYC({ currentUser }) {
                       <p>Take a selfie holding your ID or upload one</p>
                     </div>
                     <input 
-                      id="selfieFileInput"
+                      ref={selfieFileInputRef}
                       type="file" 
                       accept="image/*" 
-                      onChange={(e) => setSelfieFile(e.target.files[0])} 
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        console.log('Selfie file selected:', file?.name, file?.size, file?.type);
+                        setSelfieFile(file);
+                      }} 
                       style={{ display: 'none' }}
                     />
                   </div>

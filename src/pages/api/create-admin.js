@@ -1,6 +1,5 @@
 // ...existing code...
-import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
-import { db } from "../../database/firebaseConfig";
+import { supabaseDb } from "../../database/supabaseUtils";
 
 export default async function handler(req, res) {
   if (req.method === "GET") {
@@ -14,13 +13,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    // avoid duplicate admin
-    const usersCol = collection(db, "userlogs");
-    const existingQuery = query(usersCol, where("admin", "==", true), where("name", "==", "admin"));
-    const existingSnap = await getDocs(existingQuery);
-    if (!existingSnap.empty) {
-      const doc = existingSnap.docs[0];
-      return res.status(200).json({ id: doc.id, existing: true });
+    // Check for existing admin
+    const { data: existingAdmin, error: checkError } = await supabaseDb.getAdminUser();
+    
+    if (!checkError && existingAdmin) {
+      return res.status(200).json({ id: existingAdmin.id, existing: true });
     }
 
     const adminDoc = {
@@ -36,8 +33,10 @@ export default async function handler(req, res) {
       authStatus: "seen",
     };
 
-    const ref = await addDoc(collection(db, "userlogs"), adminDoc);
-    return res.status(200).json({ id: ref.id, existing: false });
+    const { data: newAdmin, error: createError } = await supabaseDb.createUser(adminDoc);
+    if (createError) throw createError;
+    
+    return res.status(200).json({ id: newAdmin.id, existing: false });
   } catch (err) {
     console.error("create-admin error:", err);
     return res.status(500).json({ error: err.message });

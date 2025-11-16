@@ -1,12 +1,9 @@
-import { useState, useRef, useEffect, useContext } from 'react';
+import { useState, useRef, useContext } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import Head from 'next/head';
-import app, { db } from '../database/firebaseConfig';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { supabase, supabaseAuth, supabaseDb } from '../database/supabaseUtils';
 import { themeContext } from '../../providers/ThemeProvider';
-import { useRouter } from 'next/router';
 
 // Simplified, clean version to resolve syntax issues
 export default function Signin() {
@@ -16,11 +13,10 @@ export default function Signin() {
     const [verifyState, setVerifyState] = useState('Default'); // Default | verifying | verified
     const [errMsg, setErrMsg] = useState('');
     const verifyRef = useRef(null);
-    const router = useRouter();
     const ctx = useContext(themeContext);
     const { registerFromPath } = ctx || {};
 
-    // Let the route guard in _app.jsx handle redirects to prevent conflicts
+    // No automatic redirects - signin page is completely independent
 
     const handleVerify = () => {
         if (verifyState === 'Default') {
@@ -51,50 +47,51 @@ export default function Signin() {
             clearErrorSoon();
             return;
         }
-        // Auth
-        let authUser;
+        // Auth with Supabase
+        let authResult;
         try {
-            const auth = getAuth(app);
-            const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-            authUser = cred.user;
+            authResult = await supabaseAuth.signIn(email.trim(), password);
+            if (authResult.error) {
+                throw authResult.error;
+            }
         } catch (authErr) {
             console.error('Auth error:', authErr);
             setErrMsg('Incorrect email or password');
             clearErrorSoon();
             return;
         }
-        // Firestore user lookup
-        let firestoreUser = null;
+
+        // Supabase user lookup
+        let dbUser = null;
         try {
-            const q = query(collection(db, 'userlogs'), where('email', '==', email.trim().toLowerCase()));
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-                const d = snap.docs[0];
-                firestoreUser = { ...d.data(), id: d.id };
+            const userResult = await supabaseDb.getUserByEmail(email.trim().toLowerCase());
+            if (userResult.data) {
+                dbUser = userResult.data;
             }
-        } catch (fsErr) {
-            console.warn('Firestore user lookup failed:', fsErr);
+        } catch (dbErr) {
+            console.warn('Database user lookup failed:', dbErr);
         }
-        
+
         // Check if account is suspended
-        if (firestoreUser?.accountStatus === 'suspended') {
+        if (dbUser?.account_status === 'suspended') {
             setErrMsg('Your account has been suspended. Please contact support.');
             clearErrorSoon();
             return;
         }
         
         const activeUser = {
-            name: firestoreUser?.name || authUser.displayName || '',
+            name: dbUser?.name || authResult.data.user?.user_metadata?.name || '',
             email: email.trim().toLowerCase(),
-            uid: authUser.uid,
-            admin: Boolean(firestoreUser?.admin),
-            id: firestoreUser?.id || null,
+            uid: authResult.data.user?.id,
+            admin: Boolean(dbUser?.admin),
+            id: dbUser?.id || null,
+            idnum: dbUser?.idnum || null,
             password: '******'
         };
         try { localStorage.setItem('activeUser', JSON.stringify(activeUser)); } catch(_) {}
         try { sessionStorage.setItem('activeUser', JSON.stringify(activeUser)); } catch(_) {}
         setVerifyState('Default');
-        
+
         // Simple redirect without system flags
         const destination = activeUser.admin ? '/dashboard_admin' : '/profile';
         window.location.href = destination; // Use direct navigation to avoid router conflicts

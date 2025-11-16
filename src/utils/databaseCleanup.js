@@ -1,5 +1,4 @@
-import { collection, query, where, getDocs, writeBatch, Timestamp } from 'firebase/firestore';
-import { db } from '../database/firebaseConfig';
+import { supabase } from '../database/supabaseConfig';
 
 const BATCH_SIZE = 500; // Firestore batch size limit
 const CLEANUP_CONFIG = {
@@ -23,55 +22,60 @@ const CLEANUP_CONFIG = {
 const getTimestampForDaysAgo = (days) => {
     const date = new Date();
     date.setDate(date.getDate() - days);
-    return Timestamp.fromDate(date);
+    return date.toISOString();
 };
 
 // Helper to process documents in batches
-async function processBatchDelete(querySnapshot, dryRun = true) {
-    const batch = writeBatch(db);
-    let count = 0;
-    let batchCount = 0;
-
-    for (const doc of querySnapshot.docs) {
-        if (!dryRun) {
-            batch.delete(doc.ref);
-        }
-        count++;
-
-        // Commit batch when size limit is reached
-        if (count % BATCH_SIZE === 0) {
-            if (!dryRun) {
-                await batch.commit();
-                batchCount++;
+async function processBatchDelete(tableName, conditions, dryRun = true) {
+    try {
+        let query = supabase.from(tableName).select('id');
+        
+        // Apply conditions
+        for (const [field, operator, value] of conditions) {
+            if (operator === '<=') {
+                query = query.lte(field, value);
+            } else if (operator === 'not-in') {
+                query = query.not('type', 'in', `(${value.join(',')})`);
             }
         }
-    }
 
-    // Commit any remaining documents
-    if (!dryRun && count % BATCH_SIZE !== 0) {
-        await batch.commit();
-        batchCount++;
-    }
+        const { data, error } = await query;
+        if (error) throw error;
 
-    return {
-        totalDeleted: count,
-        batchesCommitted: batchCount
-    };
+        const count = data?.length || 0;
+        let batchCount = 0;
+
+        if (!dryRun && count > 0) {
+            const ids = data.map(row => row.id);
+            const { error: deleteError } = await supabase
+                .from(tableName)
+                .delete()
+                .in('id', ids);
+            
+            if (deleteError) throw deleteError;
+            batchCount = Math.ceil(count / BATCH_SIZE);
+        }
+
+        return {
+            totalDeleted: count,
+            batchesCommitted: batchCount
+        };
+    } catch (error) {
+        console.error(`Error in batch delete for ${tableName}:`, error);
+        throw error;
+    }
 }
 
 // Cleanup old notifications
 export async function cleanupNotifications(dryRun = true) {
     try {
         const cutoffDate = getTimestampForDaysAgo(CLEANUP_CONFIG.notifications.maxAgeDays);
-        const notificationsRef = collection(db, 'notifications');
-        const oldNotificationsQuery = query(
-            notificationsRef,
-            where('timestamp', '<=', cutoffDate),
-            where('type', 'not-in', CLEANUP_CONFIG.notifications.excludeTypes)
-        );
+        const conditions = [
+            ['created_at', '<=', cutoffDate],
+            ['type', 'not-in', CLEANUP_CONFIG.notifications.excludeTypes]
+        ];
 
-        const snapshot = await getDocs(oldNotificationsQuery);
-        const result = await processBatchDelete(snapshot, dryRun);
+        const result = await processBatchDelete('notifications', conditions, dryRun);
         
         console.log(`${dryRun ? '[DRY RUN] Would have deleted' : 'Deleted'} ${result.totalDeleted} old notifications`);
         return result;
@@ -85,14 +89,11 @@ export async function cleanupNotifications(dryRun = true) {
 export async function cleanupChats(dryRun = true) {
     try {
         const cutoffDate = getTimestampForDaysAgo(CLEANUP_CONFIG.chats.maxAgeDays);
-        const chatsRef = collection(db, 'chats');
-        const oldChatsQuery = query(
-            chatsRef,
-            where('timestamp', '<=', cutoffDate)
-        );
+        const conditions = [
+            ['created_at', '<=', cutoffDate]
+        ];
 
-        const snapshot = await getDocs(oldChatsQuery);
-        const result = await processBatchDelete(snapshot, dryRun);
+        const result = await processBatchDelete('chats', conditions, dryRun);
         
         console.log(`${dryRun ? '[DRY RUN] Would have deleted' : 'Deleted'} ${result.totalDeleted} old chat messages`);
         return result;

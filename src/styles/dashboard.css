@@ -315,11 +315,11 @@
     margin-top: 8px;
     font-size: 1.9em;
     font-weight: 600;
-    color: transparent;
+    color: var(--text-deco);
+    /* Fallback color in case gradient text doesn't work */
     background-clip: text;
     -webkit-background-clip: text;
     background-image: var(--linear-grad2);
-    /* color: var(--text-deco); */
     pointer-events: none;
 }
 

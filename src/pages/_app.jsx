@@ -9,6 +9,7 @@ import '../styles/signup.css';
 import '../styles/home.css';
 import '../styles/global.css';
 import '../styles/admin-components.css';
+import '../styles/admin-dashboard.css';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { config } from '../utils/config';
 
@@ -20,89 +21,10 @@ export default function App({ Component, pageProps }) {
   const publicPaths = ['/signin', '/signin_admin', '/signup'];
   const [sessionInterval, setSessionInterval] = useState(null);
 
-    useEffect(() => {
-        let timeoutHandle;
-        
-        // Update last activity and setup session expiry checks
-        const updateActivity = () => {
-            if (timeoutHandle) clearTimeout(timeoutHandle);
-            timeoutHandle = setTimeout(() => {
-                try { localStorage.setItem('lastActivity', Date.now().toString()); } catch (e) { /* ignore */ }
-            }, 1000); // Debounce activity updates
-        };
+  // Disable all session and activity tracking to prevent signin conflicts
 
-        const checkSessionExpiry = () => {
-            try {
-                // Skip session check if on public paths
-                if (publicPaths.includes(router.pathname)) {
-                    return true;
-                }
-                
-                const lastActivity = parseInt(localStorage.getItem('lastActivity') || '0', 10);
-                const now = Date.now();
-                
-                if (lastActivity === 0) {
-                    updateActivity();
-                    return true;
-                }
-                
-                if (now - lastActivity > config.sessionTimeout) {
-                    localStorage.clear();
-                    try { sessionStorage.clear(); } catch (e) { }
-                    router.replace('/signin');
-                    return false;
-                }
-                return true;
-            } catch (e) {
-                console.error('Session expiry check failed:', e);
-                return true;
-            }
-        };    // attach listeners
-    window.addEventListener('mousemove', updateActivity);
-    window.addEventListener('keypress', updateActivity);
-    updateActivity();
-
-    const interval = setInterval(checkSessionExpiry, 60000);
-    setSessionInterval(interval);
-
-    return () => {
-      window.removeEventListener('mousemove', updateActivity);
-      window.removeEventListener('keypress', updateActivity);
-      if (interval) clearInterval(interval);
-    };
-  }, [router]);
-
-  useEffect(() => {
-    // Simplified route guard - only run once on mount, not on every route change
-    const checkAuth = () => {
-      if (typeof window === 'undefined') return;
-      
-      try {
-        const path = router.pathname;
-        const user = JSON.parse(localStorage.getItem('activeUser') || 'null');
-        
-        // Skip if already navigating with system flag
-        if (router.asPath.includes('?systemRedirect=true')) return;
-        
-        // If on protected page without auth, go to signin
-        if (!publicPaths.includes(path) && !user?.id) {
-          router.replace('/signin');
-          return;
-        }
-        
-        // If authenticated user on public page, redirect to dashboard
-        if (publicPaths.includes(path) && user?.id && path !== '/') {
-          const dest = user.admin ? '/dashboard_admin' : '/profile';
-          router.replace(dest);
-        }
-      } catch (e) {
-        console.warn('Auth check failed:', e);
-      }
-    };
-
-    // Run auth check once on mount
-    checkAuth();
-  }, [router]);
+  // Disable automatic route guard to prevent signin conflicts
+  // Individual pages will handle their own auth checks if needed
 
   return (
     <ThemeProvider>

@@ -1,8 +1,7 @@
 import {useState} from "react";
 import { useRouter } from "next/router";
-import { db, app } from "../../database/firebaseConfig";
-import { doc, updateDoc, getDoc, deleteDoc, query, collection, where, getDocs } from "firebase/firestore";
-import { getAuth, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { supabase } from "../../database/supabaseConfig";
+import { supabaseDb } from "../../database/supabaseUtils";
 
 
 const ProfileSect = ({ currentUser, setCurrentUser, widgetState, setWidgetState}) => {
@@ -30,32 +29,41 @@ const ProfileSect = ({ currentUser, setCurrentUser, widgetState, setWidgetState}
         }, 3500);
     }
 
-    const handleDetailUpdate = () => {
-        const docRef = doc(db, "userlogs", currentUser?.id)
-
-        updateDoc(docRef, {
+    const handleDetailUpdate = async () => {
+        const { data, error } = await supabaseDb.updateUser(currentUser?.id, {
             name: currentUser?.name,
-            userName: currentUser?.userName,
+            user_name: currentUser?.userName,
             avatar: currentUser?.avatar || 'avatar_1',
-            dateUpdated: new Date().toISOString()
+            updated_at: new Date().toISOString()
         });
-        sessionStorage.setItem("activeUser", JSON.stringify(currentUser));
+
+        if (!error) {
+            sessionStorage.setItem("activeUser", JSON.stringify(currentUser));
+        }
     }
 
-    const handlePasswordChnage = () => {
-        const docRef = doc(db, "userlogs", currentUser?.id)
-        getDoc(docRef).then((doc) => {
-            if(doc.data().password === passwordchange.old && passwordchange.new !== "") {
-                updateDoc(docRef, {
+    const handlePasswordChnage = async () => {
+        try {
+            const { data: userData, error } = await supabaseDb.getUserById(currentUser?.id);
+            if (error) throw error;
+
+            if (userData.password === passwordchange.old && passwordchange.new !== "") {
+                const { error: updateError } = await supabaseDb.updateUser(currentUser?.id, {
                     password: passwordchange?.new
-                }).then(() => {
+                });
+
+                if (!updateError) {
                     setpasswordchange({...passwordchange, msg: "Password updated successfully.", color: "green"});
                     removeErr();
-                });
+                } else {
+                    setpasswordchange({...passwordchange, msg: "Failed to update password", color: "#DC1262"});
+                }
             } else {
-                setpasswordchange({...passwordchange, msg: "Invalid old password or new password", color: "#DC1262"})
+                setpasswordchange({...passwordchange, msg: "Invalid old password or new password", color: "#DC1262"});
             }
-        })
+        } catch (error) {
+            setpasswordchange({...passwordchange, msg: "Error updating password", color: "#DC1262"});
+        }
     }
 
     const handleDeleteAccount = async () => {
@@ -68,83 +76,41 @@ const ProfileSect = ({ currentUser, setCurrentUser, widgetState, setWidgetState}
         setDeleteError("");
 
         try {
-            const auth = getAuth(app);
-            const user = auth.currentUser;
-
-            if (!user) {
-                setDeleteError("You must be logged in to delete your account");
-                setIsDeleting(false);
-                return;
-            }
-
-            // Verify password by re-authenticating
-            try {
-                const credential = EmailAuthProvider.credential(
-                    currentUser?.email,
-                    deletePassword
-                );
-                await reauthenticateWithCredential(user, credential);
-            } catch (authError) {
+            // Verify password by checking against stored password
+            const { data: userData, error: userError } = await supabaseDb.getUserById(currentUser?.id);
+            if (userError || userData.password !== deletePassword) {
                 setDeleteError("Incorrect password. Please try again.");
                 setIsDeleting(false);
                 return;
             }
 
-            // Delete user data from Firestore
-            try {
-                // Delete user document
-                const userDocRef = doc(db, "userlogs", currentUser?.id);
-                await deleteDoc(userDocRef);
+            // Delete user data from Supabase
+            // Note: In Supabase, we would typically use foreign key constraints and CASCADE delete
+            // For now, we'll manually delete related records if needed
 
-                // Delete user's investments
-                const investmentsQuery = query(
-                    collection(db, "investments"),
-                    where("idnum", "==", currentUser?.idnum)
-                );
-                const investmentsSnapshot = await getDocs(investmentsQuery);
-                const deleteInvestments = investmentsSnapshot.docs.map(doc => deleteDoc(doc.ref));
-                await Promise.all(deleteInvestments);
+            // Delete user document from userlogs table
+            const { error: deleteError } = await supabase
+                .from('userlogs')
+                .delete()
+                .eq('id', currentUser?.id);
 
-                // Delete user's withdrawals
-                const withdrawalsQuery = query(
-                    collection(db, "withdrawals"),
-                    where("idnum", "==", currentUser?.idnum)
-                );
-                const withdrawalsSnapshot = await getDocs(withdrawalsQuery);
-                const deleteWithdrawals = withdrawalsSnapshot.docs.map(doc => deleteDoc(doc.ref));
-                await Promise.all(deleteWithdrawals);
+            if (deleteError) throw deleteError;
 
-                // Delete user's notifications
-                const notificationsQuery = query(
-                    collection(db, "notifications"),
-                    where("idnum", "==", currentUser?.idnum)
-                );
-                const notificationsSnapshot = await getDocs(notificationsQuery);
-                const deleteNotifications = notificationsSnapshot.docs.map(doc => deleteDoc(doc.ref));
-                await Promise.all(deleteNotifications);
-
-            } catch (firestoreError) {
-                console.error("Error deleting Firestore data:", firestoreError);
-                // Continue with auth deletion even if Firestore fails
+            // Delete from Supabase Auth
+            const { error: authError } = await supabase.auth.admin.deleteUser(currentUser?.id);
+            if (authError) {
+                console.warn('Failed to delete from auth, but user data deleted:', authError);
             }
 
-            // Delete from Firebase Auth
-            await deleteUser(user);
+            // Clear local storage
+            localStorage.clear();
+            sessionStorage.clear();
 
-            // Clear session data
-            try {
-                sessionStorage.clear();
-                localStorage.clear();
-            } catch (e) {
-                console.warn("Could not clear storage:", e);
-            }
-
-            // Redirect to homepage
-            router.push("/");
-
+            // Redirect to home
+            router.push('/');
         } catch (error) {
-            console.error("Error deleting account:", error);
-            setDeleteError("An error occurred while deleting your account. Please try again.");
+            console.error('Error deleting account:', error);
+            setDeleteError("Failed to delete account. Please contact support.");
             setIsDeleting(false);
         }
     }
@@ -167,11 +133,11 @@ const ProfileSect = ({ currentUser, setCurrentUser, widgetState, setWidgetState}
           <div className="theFormField">
             <div className="unitInputField">
               <label htmlFor="name">Fullname</label>
-              <input type="text" value={currentUser?.name} onChange={(e) => {setCurrentUser({...currentUser, name: e.target.value})}}/>
+              <input type="text" value={currentUser?.name || ''} onChange={(e) => {setCurrentUser({...currentUser, name: e.target.value})}}/>
             </div>
             <div className="unitInputField">
               <label htmlFor="name">Username</label>
-              <input type="text" value={currentUser?.userName} onChange={(e) => {setCurrentUser({...currentUser, userName: e.target.value})}}/>
+              <input type="text" value={currentUser?.userName || ''} onChange={(e) => {setCurrentUser({...currentUser, userName: e.target.value})}}/>
             </div>
             <div className="unitInputField">
               <label htmlFor="name">Email Address</label>

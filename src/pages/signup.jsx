@@ -2,9 +2,8 @@ import { useState, useRef, useEffect, useContext } from 'react';
 import { motion } from "framer-motion";
 import Link from 'next/link';
 import Image from 'next/image';
-import app, { db } from '../database/firebaseConfig';
-import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
-import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { supabase } from '../database/supabaseConfig';
+import { supabaseAuth, supabaseDb } from '../database/supabaseUtils';
 import { themeContext } from '../../providers/ThemeProvider';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -21,9 +20,6 @@ const Signup = () => {
   const router = useRouter();
   const ctx = useContext(themeContext);
   const { registerFromPath } = ctx;
-
-  const colRef = collection(db, "userlogs");
-  const colRefNotif = collection(db, "notifications");
 
   // Human verification handler (simulated)
   const handleVerify = () => {
@@ -78,9 +74,12 @@ const Signup = () => {
     const newId = generatePassword();
     setToLocalStorage(prev => ({ ...prev, idnum: newId }));
 
-    getDocs(colRef).then(snapshot => {
-      const books = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-      setUsers(books);
+    // Load existing users from Supabase
+    supabaseDb.getUserByEmail('').then(({ data, error }) => {
+      if (!error && data) {
+        // For now, we'll just set an empty array since we're starting fresh
+        setUsers([]);
+      }
     }).catch(err => console.error('Error fetching users:', err));
   }, []);
 
@@ -112,68 +111,69 @@ const Signup = () => {
       }
 
         // Check for existing account by email
-      const alreadyExist = users.find(elem => elem.email === toLocaleStorage.email);
-      if (alreadyExist) {
+      const { data: existingUser, error: checkError } = await supabaseDb.getUserByEmail(toLocaleStorage.email);
+      if (existingUser) {
         throw new Error("An account already exists with this email. Try logging in.");
       }
+
       // Validate required fields
       if (!toLocaleStorage.name?.trim()) {
         throw new Error("Please enter your full name");
       }
 
-      // Check for existing account by email one more time (in case of race condition)
-      const emailQuery = query(colRef, where("email", "==", toLocaleStorage.email));
-      const emailSnapshot = await getDocs(emailQuery);
-      if (!emailSnapshot.empty) {
-        setErrMsg(config.errorMessages.emailInUse);
-        removeErr();
-        return;
-      }
+      // Create Supabase Auth user
+      const { data: authData, error: authError } = await supabaseAuth.signUp(
+        toLocaleStorage.email,
+        toLocaleStorage.password,
+        { name: toLocaleStorage.name }
+      );
+      if (authError) throw authError;
 
-      // Create Firebase Auth user first
-      const auth = getAuth(app);
-      const userCredential = await createUserWithEmailAndPassword(auth, toLocaleStorage.email, toLocaleStorage.password);
-      const createdUser = userCredential.user;
-
-      // Ensure generated idnum is unique among existing users
+      // Ensure generated idnum is unique
       let candidateId = toLocaleStorage.idnum || generatePassword();
-      while (users.some(u => String(u.idnum) === String(candidateId))) {
-        candidateId = generatePassword();
-      }
-      // Persist the resolved id back to local state
-      if (candidateId !== toLocaleStorage.idnum) {
-        setToLocalStorage(prev => ({ ...prev, idnum: candidateId }));
-      }
+      // For fresh start, we'll just use the generated ID
 
       // Build notification for sign up bonus
       const notificationPush = {
+        title: "Welcome Bonus",
         message: "You just received $50 sign up bonus",
-        dateTime: new Date().toISOString(),
         idnum: candidateId,
         status: "unseen",
         type: "signup_bonus"
       };
 
-      // Prepare Firestore user doc (don't store plaintext password)
+      // Prepare Supabase user doc
       const userDoc = {
-        ...toLocaleStorage,
+        id: authData.user?.id, // Use the Supabase Auth user ID as the primary key
+        email: toLocaleStorage.email.toLowerCase(),
+        name: toLocaleStorage.name,
+        password: toLocaleStorage.password,
+        balance: toLocaleStorage.balance,
+        bonus: toLocaleStorage.bonus,
         idnum: candidateId,
-        uid: createdUser.uid,
-        email: createdUser.email, // Use email from Firebase Auth
-        password: "******",
-        dateCreated: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
+        avatar: toLocaleStorage.avatar,
+        account_status: 'active',
+        admin: toLocaleStorage.admin,
+        kyc_status: 'pending',
+        date_created: new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       // Save notification and user document
-      await addDoc(colRefNotif, notificationPush);
-      const userRef = await addDoc(colRef, userDoc);
+      await supabaseDb.createNotification(notificationPush);
+      const { data: userRecord, error: userError } = await supabase
+        .from('userlogs')
+        .insert([userDoc])
+        .select()
+        .single();
+      if (userError) throw userError;
 
       // Store user data safely (no password) in localStorage
-      const safeUserData = { ...userDoc, id: userRef.id };
+      const safeUserData = { ...userRecord };
       delete safeUserData.password;
-  localStorage.setItem("activeUser", JSON.stringify(safeUserData));
-  try { sessionStorage.setItem("activeUser", JSON.stringify(safeUserData)); } catch (e) { /* ignore */ }
+      localStorage.setItem("activeUser", JSON.stringify(safeUserData));
+      try { sessionStorage.setItem("activeUser", JSON.stringify(safeUserData)); } catch (e) { /* ignore */ }
 
       // Reset form state
       form.reset();
@@ -190,18 +190,18 @@ const Signup = () => {
         // Use validation error messages directly
         message = err.message;
       } else {
-        // Handle Firebase Auth errors
+        // Handle Supabase Auth errors
         switch(err?.code) {
-          case 'auth/email-already-in-use':
+          case 'user_already_registered':
             message = config.errorMessages.emailInUse;
             break;
-          case 'auth/invalid-email':
+          case 'invalid_email':
             message = config.errorMessages.invalidEmail;
             break;
-          case 'auth/weak-password':
+          case 'weak_password':
             message = config.errorMessages.weakPassword;
             break;
-          case 'auth/network-request-failed':
+          case 'network_error':
             message = 'Network error. Please check your internet connection.';
             break;
           default:

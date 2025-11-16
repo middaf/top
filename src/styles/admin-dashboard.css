@@ -43,3 +43,784 @@
     font-size: 20px;
   }
 }
+
+/* Users Table Styles */
+.usersTableContainer {
+  width: 100%;
+  border-radius: 12px;
+  background-color: var(--dark-clr4);
+  overflow-x: auto;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.usersTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 1200px;
+}
+
+.usersTable thead {
+  background: linear-gradient(135deg, var(--primary-clr), var(--sec-clr));
+  color: white;
+}
+
+.usersTable th {
+  padding: 16px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--dark-clr2);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.usersTable th:first-child {
+  border-top-left-radius: 12px;
+  width: 60px;
+  text-align: center;
+}
+
+.usersTable th:last-child {
+  border-top-right-radius: 12px;
+  width: 180px;
+  text-align: center;
+}
+
+.usersTable tbody tr {
+  transition: all 0.2s ease;
+  border-bottom: 1px solid var(--opac-clr3);
+}
+
+.usersTable tbody tr:hover {
+  background-color: var(--opac-clr2);
+  transform: scale(1.01);
+}
+
+.usersTable tbody tr:last-child {
+  border-bottom: none;
+}
+
+.usersTable td {
+  padding: 14px 12px;
+  vertical-align: middle;
+  color: var(--text-clr1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.usersTable td:first-child {
+  text-align: center;
+  font-weight: 600;
+  color: var(--sec-clr);
+}
+
+.usersTable td:nth-child(5),
+.usersTable td:nth-child(6) {
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+.usersTable td:nth-child(7),
+.usersTable td:nth-child(8) {
+  text-align: center;
+}
+
+/* Clickable name styling */
+.clickable-name {
+  cursor: pointer;
+  color: var(--primary-clr);
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.clickable-name:hover {
+  color: var(--sec-clr);
+  text-decoration: underline;
+}
+
+/* Cryptic ID styling */
+.cryptic-id {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  background-color: var(--opac-clr3);
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: var(--text-deco);
+}
+
+/* Balance and Bonus styling */
+.balance {
+  color: var(--green-clr);
+  font-weight: 600;
+}
+
+.bonus {
+  color: var(--yellow-clr);
+  font-weight: 600;
+}
+
+/* Status badges */
+.account-status, .kyc-status {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+.account-status.active {
+  background-color: rgba(46, 125, 50, 0.2);
+  color: var(--green-clr);
+  border: 1px solid rgba(46, 125, 50, 0.3);
+}
+
+.account-status.suspended {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: var(--danger-clr);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.kyc-status {
+  font-size: 10px;
+}
+
+.kyc-status.verified {
+  background-color: rgba(46, 125, 50, 0.2);
+  color: var(--green-clr);
+  border: 1px solid rgba(46, 125, 50, 0.3);
+}
+
+.kyc-status.pending {
+  background-color: rgba(255, 152, 0, 0.2);
+  color: var(--yellow-clr);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.kyc-status.rejected {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: var(--danger-clr);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.kyc-status.submitted {
+  background-color: rgba(33, 150, 243, 0.2);
+  color: #2196f3;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+  min-width: 70px;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.action-btn.suspend {
+  background-color: var(--yellow-clr);
+  color: var(--dark-clr1);
+}
+
+.action-btn.activate {
+  background-color: var(--green-clr);
+  color: white;
+}
+
+.action-btn.delete {
+  background-color: var(--danger-clr);
+  color: white;
+}
+
+.action-btn.suspend:hover {
+  background-color: #ffb300;
+}
+
+.action-btn.activate:hover {
+  background-color: #4caf50;
+}
+
+.action-btn.delete:hover {
+  background-color: #d32f2f;
+}
+
+/* Responsive table styles */
+@media (max-width: 1200px) {
+  .usersTable {
+    font-size: 12px;
+  }
+  
+  .usersTable th,
+  .usersTable td {
+    padding: 10px 8px;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .action-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+    min-width: 60px;
+  }
+}
+
+@media (max-width: 768px) {
+  .usersTableContainer {
+    border-radius: 8px;
+    margin: 15px 0;
+  }
+  
+  .usersTable {
+    font-size: 11px;
+    min-width: 1000px;
+  }
+  
+  .usersTable th,
+  .usersTable td {
+    padding: 8px 6px;
+  }
+  
+  .cryptic-id {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+  
+  .account-status, .kyc-status {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+}
+
+/* Filter section improvements */
+.filterSection {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.searchBox input {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--opac-clr3);
+  background-color: var(--dark-clr3);
+  color: var(--text-clr1);
+  font-size: 14px;
+  min-width: 300px;
+}
+
+.searchBox input:focus {
+  outline: none;
+  border-color: var(--primary-clr);
+  box-shadow: 0 0 0 2px rgba(6, 114, 205, 0.2);
+}
+
+.sortOptions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.sortOptions select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--opac-clr3);
+  background-color: var(--dark-clr3);
+  color: var(--text-clr1);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sortOptions button {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--opac-clr3);
+  background-color: var(--dark-clr3);
+  color: var(--text-clr1);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.sortOptions button:hover {
+  background-color: var(--primary-clr);
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .filterSection {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .searchBox input {
+    min-width: 100%;
+  }
+  
+  .sortOptions {
+    justify-content: center;
+  }
+}
+
+/* KYC Table Styles */
+.kycTableContainer {
+  width: 100%;
+  border-radius: 12px;
+  background-color: var(--dark-clr4);
+  overflow-x: auto;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.kycTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 1000px;
+}
+
+.kycTable thead {
+  background: linear-gradient(135deg, var(--primary-clr), var(--sec-clr));
+  color: white;
+}
+
+.kycTable th {
+  padding: 16px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--dark-clr2);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.kycTable th:first-child {
+  border-top-left-radius: 12px;
+  width: 60px;
+  text-align: center;
+}
+
+.kycTable th:last-child {
+  border-top-right-radius: 12px;
+  width: 150px;
+  text-align: center;
+}
+
+.kycTable tbody tr {
+  transition: all 0.2s ease;
+  border-bottom: 1px solid var(--opac-clr3);
+}
+
+.kycTable tbody tr:hover {
+  background-color: var(--opac-clr2);
+  transform: scale(1.01);
+}
+
+.kycTable tbody tr:last-child {
+  border-bottom: none;
+}
+
+.kycTable td {
+  padding: 14px 12px;
+  vertical-align: middle;
+  color: var(--text-clr1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.kycTable td:first-child {
+  text-align: center;
+  font-weight: 600;
+  color: var(--sec-clr);
+}
+
+.kycTable td:nth-child(5) {
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+}
+
+/* ID Number styling */
+.id-number {
+  font-family: 'Courier New', monospace;
+  background-color: var(--opac-clr3);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* KYC Status badges for table */
+.kycTable .kyc-status {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  display: inline-block;
+  min-width: 80px;
+  text-align: center;
+}
+
+.kycTable .kyc-status.verified {
+  background-color: rgba(46, 125, 50, 0.2);
+  color: var(--green-clr);
+  border: 1px solid rgba(46, 125, 50, 0.3);
+}
+
+.kycTable .kyc-status.pending {
+  background-color: rgba(255, 152, 0, 0.2);
+  color: var(--yellow-clr);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.kycTable .kyc-status.rejected {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: var(--danger-clr);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.kycTable .kyc-status.submitted {
+  background-color: rgba(33, 150, 243, 0.2);
+  color: #2196f3;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+/* KYC Action buttons */
+.kycTable .action-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.kycTable .action-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+  min-width: 70px;
+}
+
+.kycTable .action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.kycTable .action-btn.verify {
+  background-color: var(--green-clr);
+  color: white;
+}
+
+.kycTable .action-btn.verify:hover {
+  background-color: #4caf50;
+}
+
+.kycTable .action-btn.reject {
+  background-color: var(--danger-clr);
+  color: white;
+}
+
+.kycTable .action-btn.reject:hover {
+  background-color: #d32f2f;
+}
+
+/* Responsive KYC table styles */
+@media (max-width: 1200px) {
+  .kycTable {
+    font-size: 12px;
+  }
+  
+  .kycTable th,
+  .kycTable td {
+    padding: 10px 8px;
+  }
+  
+  .kycTable .action-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .kycTable .action-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+    min-width: 60px;
+  }
+}
+
+@media (max-width: 768px) {
+  .kycTableContainer {
+    border-radius: 8px;
+    margin: 15px 0;
+  }
+  
+  .kycTable {
+    font-size: 11px;
+    min-width: 900px;
+  }
+  
+  .kycTable th,
+  .kycTable td {
+    padding: 8px 6px;
+  }
+  
+  .id-number {
+    font-size: 10px;
+    padding: 2px 6px;
+    max-width: 120px;
+  }
+  
+  .kycTable .kyc-status {
+    font-size: 9px;
+    padding: 2px 6px;
+    min-width: 60px;
+  }
+}
+
+/* Investments Table Styles */
+.investmentsTableContainer {
+  width: 100%;
+  border-radius: 12px;
+  background-color: var(--dark-clr4);
+  overflow-x: auto;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.investmentsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 1100px;
+}
+
+.investmentsTable thead {
+  background: linear-gradient(135deg, var(--primary-clr), var(--sec-clr));
+  color: white;
+}
+
+.investmentsTable th {
+  padding: 16px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--dark-clr2);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.investmentsTable th:first-child {
+  border-top-left-radius: 12px;
+  width: 60px;
+  text-align: center;
+}
+
+.investmentsTable th:last-child {
+  border-top-right-radius: 12px;
+  width: 120px;
+  text-align: center;
+}
+
+.investmentsTable tbody tr {
+  transition: all 0.2s ease;
+  border-bottom: 1px solid var(--opac-clr3);
+  cursor: pointer;
+}
+
+.investmentsTable tbody tr:hover {
+  background-color: var(--opac-clr2);
+  transform: scale(1.01);
+}
+
+.investmentsTable tbody tr:last-child {
+  border-bottom: none;
+}
+
+.investmentsTable td {
+  padding: 14px 12px;
+  vertical-align: middle;
+  color: var(--text-clr1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.investmentsTable td:first-child {
+  text-align: center;
+  font-weight: 600;
+  color: var(--sec-clr);
+}
+
+.investmentsTable td:nth-child(4),
+.investmentsTable td:nth-child(5),
+.investmentsTable td:nth-child(6) {
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+/* Investment data styling */
+.capital {
+  color: var(--green-clr);
+  font-weight: 600;
+}
+
+.roi {
+  color: var(--yellow-clr);
+  font-weight: 600;
+}
+
+.bonus {
+  color: var(--sec-clr);
+  font-weight: 600;
+}
+
+/* Investment Status badges */
+.investment-status {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
+  min-width: 80px;
+  text-align: center;
+}
+
+.investment-status.active {
+  background-color: rgba(46, 125, 50, 0.2);
+  color: var(--green-clr);
+  border: 1px solid rgba(46, 125, 50, 0.3);
+}
+
+.investment-status.pending {
+  background-color: rgba(255, 152, 0, 0.2);
+  color: var(--yellow-clr);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.investment-status.expired {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: var(--danger-clr);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+/* Investment Action buttons */
+.investmentsTable .action-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.investmentsTable .action-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+  min-width: 70px;
+}
+
+.investmentsTable .action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.investmentsTable .action-btn.approve {
+  background-color: var(--green-clr);
+  color: white;
+}
+
+.investmentsTable .action-btn.approve:hover {
+  background-color: #4caf50;
+}
+
+/* Responsive investments table styles */
+@media (max-width: 1200px) {
+  .investmentsTable {
+    font-size: 12px;
+  }
+  
+  .investmentsTable th,
+  .investmentsTable td {
+    padding: 10px 8px;
+  }
+  
+  .investmentsTable .action-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .investmentsTable .action-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+    min-width: 60px;
+  }
+}
+
+@media (max-width: 768px) {
+  .investmentsTableContainer {
+    border-radius: 8px;
+    margin: 15px 0;
+  }
+  
+  .investmentsTable {
+    font-size: 11px;
+    min-width: 1000px;
+  }
+  
+  .investmentsTable th,
+  .investmentsTable td {
+    padding: 8px 6px;
+  }
+  
+  .investment-status {
+    font-size: 9px;
+    padding: 2px 6px;
+    min-width: 60px;
+  }
+}

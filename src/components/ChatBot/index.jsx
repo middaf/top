@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { db } from '../../database/firebaseConfig';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, where } from 'firebase/firestore';
+import { supabase, supabaseDb, supabaseRealtime } from '../../database/supabaseUtils';
 import styles from './ChatBot.module.css';
 
 function ChatBot() {
@@ -33,28 +32,35 @@ function ChatBot() {
         }
 
         // Query only for the current user's chats to preserve privacy.
-        // Create a query that will work with the composite index
-        const chatRef = collection(db, 'chats');
-        const q = activeId ? query(
-            chatRef,
-            where('userId', '==', activeId),
-            orderBy('timestamp', 'asc'),
-            orderBy('__name__', 'asc') // Add name ordering to match the index
-        ) : query(chatRef, orderBy('timestamp', 'asc'));
+        const unsubscribe = supabaseRealtime.subscribeToChatMessages(activeId, (payload) => {
+            // Refresh messages when there's a change
+            supabaseDb.getChatMessages(activeId).then(({ data, error }) => {
+                if (!error && data) {
+                    const newMessages = data.map(msg => ({
+                        id: msg.id,
+                        ...msg,
+                        text: msg.message,
+                        sender: msg.is_admin ? 'bot' : 'user'
+                    }));
+                    setMessages(newMessages);
+                    // Scroll to bottom when new messages arrive
+                    setTimeout(scrollToBottom, 100);
+                }
+            });
+        });
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const newMessages = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                text: doc.data().message,
-                sender: doc.data().isAdmin ? 'bot' : 'user'
-            }));
-            setMessages(newMessages);
-            // Scroll to bottom when new messages arrive
-            setTimeout(scrollToBottom, 100);
-        }, (err) => {
-            // Minimal error logging to help debug subscription / permission issues
-            console.error('Chat subscription error:', err);
+        // Initial load of messages
+        supabaseDb.getChatMessages(activeId).then(({ data, error }) => {
+            if (!error && data) {
+                const initialMessages = data.map(msg => ({
+                    id: msg.id,
+                    ...msg,
+                    text: msg.message,
+                    sender: msg.is_admin ? 'bot' : 'user'
+                }));
+                setMessages(initialMessages);
+                setTimeout(scrollToBottom, 100);
+            }
         });
 
         // Cleanup subscription on unmount or when activeId/isOpen changes
@@ -95,14 +101,12 @@ function ChatBot() {
                         active = {}; 
                     }
 
-                    addDoc(collection(db, 'chats'), {
+                    supabaseDb.addChatMessage({
                         message: detail.prefillMessage,
-                        timestamp: serverTimestamp(),
-                        isAdmin: false,
-                        read: false,
-                        type: 'withdrawal-request',
-                        userId: active?.idnum || active?.uid,
-                        userName: active?.name || active?.userName || active?.email
+                        user_id: active?.idnum || active?.uid,
+                        user_name: active?.name || active?.userName || active?.email,
+                        is_admin: false,
+                        type: 'withdrawal-request'
                     }).catch(err => {
                         console.error('Auto-send failed:', err);
                     });
@@ -126,12 +130,11 @@ function ChatBot() {
             const userId = active?.idnum || active?.uid || 'user123';
             const userName = active?.name || active?.userName || active?.email || 'User';
 
-            await addDoc(collection(db, 'chats'), {
+            await supabaseDb.addChatMessage({
                 message: body,
-                userId,
-                userName,
-                timestamp: serverTimestamp(),
-                isAdmin: false
+                user_id: userId,
+                user_name: userName,
+                is_admin: false
             });
             setInputMessage('');
         } catch (error) {

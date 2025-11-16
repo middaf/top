@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { db } from "../../database/firebaseConfig";
-import { doc, updateDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { supabaseDb } from "../../database/supabaseUtils";
 
 const UsersAdmin = ({ activeUsers = [], investments = [], withdrawals = [], setProfileState, setUserData}) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,10 +27,9 @@ const UsersAdmin = ({ activeUsers = [], investments = [], withdrawals = [], setP
         if (Array.isArray(activeUsers)) {
             activeUsers.forEach(async(elem) => {
                 try {
-                    const docRef = doc(db, "userlogs", elem.id);
-                    await updateDoc(docRef, {
+                    await supabaseDb.updateUser(elem.id, {
                         authStatus: "seen"
-                    })
+                    });
                 } catch (error) {
                     console.log(error);
                 }
@@ -45,28 +43,14 @@ const UsersAdmin = ({ activeUsers = [], investments = [], withdrawals = [], setP
         
         setIsProcessing(true);
         try {
-            // Delete user document
-            await deleteDoc(doc(db, "userlogs", selectedUser.id));
-            
             // Delete related investments
-            const investmentsQuery = query(
-                collection(db, "investments"),
-                where("userId", "==", selectedUser.id)
-            );
-            const investmentDocs = await getDocs(investmentsQuery);
-            investmentDocs.forEach(async (doc) => {
-                await deleteDoc(doc.ref);
-            });
+            await supabaseDb.deleteInvestmentsByUserId(selectedUser.id);
             
             // Delete related withdrawals
-            const withdrawalsQuery = query(
-                collection(db, "withdrawals"),
-                where("userId", "==", selectedUser.id)
-            );
-            const withdrawalDocs = await getDocs(withdrawalsQuery);
-            withdrawalDocs.forEach(async (doc) => {
-                await deleteDoc(doc.ref);
-            });
+            await supabaseDb.deleteWithdrawalsByUserId(selectedUser.id);
+            
+            // Delete user document
+            await supabaseDb.deleteUser(selectedUser.id);
             
             alert(`User ${selectedUser.name} has been deleted successfully`);
             setShowDeleteModal(false);
@@ -87,7 +71,7 @@ const UsersAdmin = ({ activeUsers = [], investments = [], withdrawals = [], setP
         setIsProcessing(true);
         try {
             const newStatus = selectedUser.accountStatus === "suspended" ? "active" : "suspended";
-            await updateDoc(doc(db, "userlogs", selectedUser.id), {
+            await supabaseDb.updateUser(selectedUser.id, {
                 accountStatus: newStatus
             });
             
@@ -160,81 +144,86 @@ const UsersAdmin = ({ activeUsers = [], investments = [], withdrawals = [], setP
       <h2>Users Data ({filteredUsers.length})</h2>
       {
           activeUsers.length > 0 ? (
-              <div className="historyTable">
-                                              <thead>
-                                <tr>
-                                    <th>S/N</th>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Cryptic ID</th>
-                                    <th>Joined On</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                  {
-                      sortedUsers.map((elem, idx) => (
-                          <div className="investmentTablehead" key={`${elem.idnum}-UAdmin_${idx}`}>
-                              <div className="unitheadsect">{idx + 1}</div>
-                              <div className="unitheadsect" onClick={() => {setUserData(elem); setProfileState("Edit User")}} style={{cursor: 'pointer'}}>{elem?.name}</div>
-                              <div className="unitheadsect">{elem?.email}</div>
-                              <div className="unitheadsect">{elem?.id}</div>
-                              <div className="unitheadsect">{new Date(elem?.date).toLocaleDateString("en-US", {day: "numeric", month: "short", year: "numeric", })}</div>
-                              <div className="unitheadsect">
-                                  <span style={{
-                                      padding: '4px 8px',
-                                      borderRadius: '4px',
-                                      fontSize: '12px',
-                                      fontWeight: 'bold',
-                                      backgroundColor: elem.accountStatus === 'suspended' ? '#ffebee' : '#e8f5e9',
-                                      color: elem.accountStatus === 'suspended' ? '#c62828' : '#2e7d32'
-                                  }}>
-                                      {elem.accountStatus === 'suspended' ? 'Suspended' : 'Active'}
-                                  </span>
-                              </div>
-                              <div className="unitheadsect">
-                                  <div style={{display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap'}}>
-                                      <button
-                                          onClick={() => {
-                                              setSelectedUser(elem);
-                                              setShowSuspendModal(true);
-                                          }}
-                                          style={{
-                                              padding: '6px 12px',
-                                              borderRadius: '4px',
-                                              border: 'none',
-                                              cursor: 'pointer',
-                                              fontSize: '12px',
-                                              fontWeight: 'bold',
-                                              backgroundColor: elem.accountStatus === 'suspended' ? '#4caf50' : '#ff9800',
-                                              color: 'white'
-                                          }}
-                                      >
-                                          {elem.accountStatus === 'suspended' ? 'Activate' : 'Suspend'}
-                                      </button>
-                                      <button
-                                          onClick={() => {
-                                              setSelectedUser(elem);
-                                              setShowDeleteModal(true);
-                                          }}
-                                          style={{
-                                              padding: '6px 12px',
-                                              borderRadius: '4px',
-                                              border: 'none',
-                                              cursor: 'pointer',
-                                              fontSize: '12px',
-                                              fontWeight: 'bold',
-                                              backgroundColor: '#f44336',
-                                              color: 'white'
-                                          }}
-                                      >
-                                          Delete
-                                      </button>
-                                  </div>
-                              </div>
-                          </div>
-                      ))
-                  }
+              <div className="usersTableContainer">
+                  <table className="usersTable">
+                      <thead>
+                          <tr>
+                              <th>S/N</th>
+                              <th>Name</th>
+                              <th>Email</th>
+                              <th>Cryptic ID</th>
+                              <th>Balance</th>
+                              <th>Bonus</th>
+                              <th>Investments</th>
+                              <th>Referrals</th>
+                              <th>KYC Status</th>
+                              <th>Joined On</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          {
+                              sortedUsers.map((elem, idx) => (
+                                  <tr key={`${elem.idnum}-UAdmin_${idx}`}>
+                                      <td>{idx + 1}</td>
+                                      <td>
+                                          <span 
+                                              className="clickable-name"
+                                              onClick={() => {setUserData(elem); setProfileState("Edit User")}}
+                                          >
+                                              {elem?.name || elem?.userName || 'N/A'}
+                                          </span>
+                                      </td>
+                                      <td>{elem?.email || 'N/A'}</td>
+                                      <td className="cryptic-id">{elem?.id?.substring(0, 8)}...</td>
+                                      <td className="balance">${parseFloat(elem?.balance || 0).toLocaleString()}</td>
+                                      <td className="bonus">${parseFloat(elem?.bonus || 0).toLocaleString()}</td>
+                                      <td>{elem?.investmentCount || 0}</td>
+                                      <td>{elem?.referralCount || 0}</td>
+                                      <td>
+                                          <span className={`kyc-status ${elem?.kyc_status || 'pending'}`}>
+                                              {elem?.kyc_status === 'verified' ? 'Verified' : 
+                                               elem?.kyc_status === 'rejected' ? 'Rejected' : 'Pending'}
+                                          </span>
+                                      </td>
+                                      <td>{new Date(elem?.date || elem?.created_at).toLocaleDateString("en-US", {
+                                          day: "numeric", 
+                                          month: "short", 
+                                          year: "numeric"
+                                      })}</td>
+                                      <td>
+                                          <span className={`account-status ${elem.accountStatus === 'suspended' ? 'suspended' : 'active'}`}>
+                                              {elem.accountStatus === 'suspended' ? 'Suspended' : 'Active'}
+                                          </span>
+                                      </td>
+                                      <td>
+                                          <div className="action-buttons">
+                                              <button
+                                                  className={`action-btn ${elem.accountStatus === 'suspended' ? 'activate' : 'suspend'}`}
+                                                  onClick={() => {
+                                                      setSelectedUser(elem);
+                                                      setShowSuspendModal(true);
+                                                  }}
+                                              >
+                                                  {elem.accountStatus === 'suspended' ? 'Activate' : 'Suspend'}
+                                              </button>
+                                              <button
+                                                  className="action-btn delete"
+                                                  onClick={() => {
+                                                      setSelectedUser(elem);
+                                                      setShowDeleteModal(true);
+                                                  }}
+                                              >
+                                                  Delete
+                                              </button>
+                                          </div>
+                                      </td>
+                                  </tr>
+                              ))
+                          }
+                      </tbody>
+                  </table>
               </div>
 
           ) : (

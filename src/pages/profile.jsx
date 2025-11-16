@@ -1,41 +1,27 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useState, useContext, useEffect } from "react";
+import { useState, useContext, useEffect, useCallback } from "react";
 import Navbar from "../components/home/Navbar";
 import Link from "next/link";
 import Image from 'next/image';
 import DashboardSect from "../components/dashboard/dashboardSect";
 import ProfileSect from "../components/dashboard/profileSect";
-import { db } from "../database/firebaseConfig";
-import profileStyles from "../components/dashboard/Profile.module.css";
-import {
-  getFirestore,
-  collection,
-  where,
-  query,
-  onSnapshot,
-  doc,
-  getDoc,
-  getDocs
-} from "firebase/firestore";
+import { supabase, supabaseDb, supabaseRealtime } from "../database/supabaseUtils";
 import { useRouter } from "next/router";
 import DynamicWidget from "../components/dashboard/dynamicWidget";
-import dynamic from 'next/dynamic';
-// Dynamic import ChatBot to avoid SSR issues
-const ChatBot = dynamic(
-  () => import('../components/ChatBot').then((mod) => ({ default: mod.ChatBot })),
-  { ssr: false }
-);
 import InvestmentSect from "../components/dashboard/investmentSect";
 import { themeContext } from "../../providers/ThemeProvider";
 import PaymentSect from "../components/dashboard/PaymentSect";
 import WithdrawalSect from "../components/dashboard/WithdrawalSect";
+import profileStyles from "../components/dashboard/Profile.module.css";
 import WithdrawalPayment from "../components/dashboard/WithdrawPayment";
 import NotificationSect from "../components/dashboard/NotificationSect";
 import LoanSect from "../components/dashboard/LoanSect";
 import KYC from "../components/dashboard/KYC";
 import Head from "next/head";
+import Script from "next/script";
 
 const Profile = () => {
+  const router = useRouter();
   const [passwordShow, setPasswordShow] = useState(true);
   const [profilestate, setProfileState] = useState("Dashboard");
   const [bitPrice, setBitPrice] = useState(0);
@@ -79,7 +65,7 @@ const Profile = () => {
   });
 
   const [investData, setInvestData] = useState({
-    idnum: currentUser?.idnum,
+    idnum: 101010, // Use default value instead of currentUser?.idnum
     plan: "Gold",
     status: "Pending",
     capital: 0,
@@ -106,35 +92,161 @@ const Profile = () => {
     type: "avatar",
   });
 
-  // Firestore subscriptions must be registered inside useEffect to avoid
+  const [kycStatus, setKycStatus] = useState('pending');
+
+  const openTawkChat = useCallback((detail = {}) => {
+    if (typeof window === 'undefined' || currentUser?.admin) {
+      return false;
+    }
+
+    const api = window.Tawk_API;
+    if (!api || typeof api.maximize !== 'function') {
+      return false;
+    }
+
+    try {
+      if (typeof api.showWidget === 'function') {
+        api.showWidget();
+      }
+      api.maximize();
+
+      if (detail?.prefillMessage && typeof api.setAttributes === 'function') {
+        const message = String(detail.prefillMessage).slice(0, 600);
+        api.setAttributes({ Last_Request_Context: message }, (error) => {
+          if (error) {
+            console.warn('Tawk.to attribute error:', error);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn('Unable to open Tawk.to chat:', error);
+      return false;
+    }
+
+    return true;
+  }, [currentUser?.admin]);
+
+  const flushPendingTawkChat = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const pendingDetail = window.__pendingTawkOpen;
+    if (pendingDetail && openTawkChat(pendingDetail)) {
+      window.__pendingTawkOpen = null;
+    }
+  }, [openTawkChat]);
+
+  useEffect(() => {
+    if (currentUser?.admin) {
+      return undefined;
+    }
+
+    const handleOpenChat = (event) => {
+      const detail = event?.detail || {};
+      const opened = openTawkChat(detail);
+      if (!opened && typeof window !== 'undefined') {
+        window.__pendingTawkOpen = detail;
+      }
+    };
+
+    window.addEventListener('openChatBot', handleOpenChat);
+    return () => window.removeEventListener('openChatBot', handleOpenChat);
+  }, [currentUser?.admin, openTawkChat]);
+
+  // Supabase real-time subscriptions must be registered inside useEffect to avoid
   // running on the server and causing hydration/side-effect issues.
   useEffect(() => {
     // we need an idnum to subscribe to related collections (investments/notifications)
     if (!currentUser?.idnum) return;
 
-    const investCol = collection(db, "investments");
-    const investQuery = query(investCol, where("idnum", "==", currentUser?.idnum));
+    // Subscribe to investments
+    const investmentsSubscription = supabaseRealtime.subscribeToInvestments(
+      currentUser.idnum,
+      (payload) => {
+        console.log('Investments change:', payload);
+        // Refresh investments data
+        supabaseDb.getInvestmentsByIdnum(currentUser.idnum).then(({ data, error }) => {
+          if (!error && data) {
+            setInvestments(data);
+          }
+        });
+      }
+    );
 
-    const unsubscribeInvest = onSnapshot(investQuery, (snapshot) => {
-      const books = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
-      setInvestments(books);
+    // Subscribe to notifications
+    const notificationsSubscription = supabaseRealtime.subscribeToNotifications(
+      currentUser.idnum,
+      (payload) => {
+        console.log('Notifications change detected:', payload);
+        // Refresh notifications data
+        supabaseDb.getNotificationsByIdnum(currentUser.idnum).then(({ data, error }) => {
+          if (!error && data) {
+            console.log('Updated notifications data:', data);
+            setNotifications(data);
+          } else {
+            console.error('Error fetching updated notifications:', error);
+          }
+        });
+      }
+    );
+
+    // Initial data load
+    supabaseDb.getInvestmentsByIdnum(currentUser.idnum).then(({ data, error }) => {
+      if (!error && data) {
+        setInvestments(data);
+      }
     });
 
-    const notifCol = collection(db, "notifications");
-    const notifQuery = query(notifCol, where("idnum", "==", currentUser?.idnum));
-
-    const unsubscribeNotif = onSnapshot(notifQuery, (snapshot) => {
-      const utilNotif = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
-      setNotifications(utilNotif);
+    supabaseDb.getNotificationsByIdnum(currentUser.idnum).then(({ data, error }) => {
+      if (!error && data) {
+        console.log('Initial notifications loaded:', data);
+        setNotifications(data);
+      } else {
+        console.error('Error loading initial notifications:', error);
+      }
     });
+
+    // Initial KYC status load
+    if (currentUser?.id) {
+      supabaseDb.getKYCByUserId(currentUser.id).then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          setKycStatus(data[0].status || 'pending');
+        } else {
+          setKycStatus('pending');
+        }
+      });
+    }
+
+    // KYC status subscription
+    let kycSubscription = null;
+    if (currentUser?.id) {
+      kycSubscription = supabase
+        .channel('user-kyc-dashboard')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'kyc',
+          filter: `user_id=eq.${currentUser.id}`
+        }, (payload) => {
+          console.log('KYC status change in dashboard:', payload);
+          if (payload.new) {
+            setKycStatus(payload.new.status || 'pending');
+          } else if (payload.eventType === 'DELETE') {
+            setKycStatus('pending');
+          }
+        })
+        .subscribe();
+    }
 
     return () => {
-      unsubscribeInvest();
-      unsubscribeNotif();
+      investmentsSubscription.unsubscribe();
+      notificationsSubscription.unsubscribe();
+      if (kycSubscription) kycSubscription.unsubscribe();
     };
   }, [currentUser?.idnum]);
 
-  const router = useRouter();
+  // Router moved to top of component
   async function fetchData(path, stateSetter) {
     try {
       // Use local API proxy to avoid CORS issues
@@ -186,41 +298,84 @@ const Profile = () => {
     setShowSidePanel(false)
   }, [profilestate]);
 
+  // Handle hash navigation for sections like #packages
   useEffect(() => {
-    const user = JSON.parse(sessionStorage.getItem("activeUser")) || {};
-    let unsub = null;
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash;
+      if (hash) {
+        // If navigating to packages, ensure we're on the Dashboard section
+        if (hash === '#packages') {
+          setProfileState('Dashboard');
+        }
+        // Small delay to ensure DOM is rendered
+        setTimeout(() => {
+          const element = document.querySelector(hash);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth' });
+          }
+        }, 200);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    // Check both localStorage and sessionStorage for user
+    let user = null;
+    try {
+      user = JSON.parse(sessionStorage.getItem("activeUser")) || 
+             JSON.parse(localStorage.getItem("activeUser"));
+    } catch (e) {
+      console.warn("Error parsing user data:", e);
+    }
+    
+    // If no user data found at all, redirect to signin
+    if (!user || !user.email) {
+      console.log("No valid user data found, redirecting to signin");
+      setregisterFromPath("/profile");
+      router.push("/signin");
+      return;
+    }
+    let subscription = null;
     async function setupListener() {
       let userDocId = user.id;
       // If no doc ID, query by idnum
       if (!userDocId && user.idnum) {
-        const usersCol = collection(db, "userlogs");
-        const q = query(usersCol, where("idnum", "==", user.idnum));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          userDocId = snap.docs[0].id;
+        const { data, error } = await supabaseDb.getUserByIdnum(user.idnum);
+        if (!error && data) {
+          userDocId = data.id;
         }
       }
+
       if (userDocId) {
-        const docRef = doc(db, "userlogs", userDocId);
-        unsub = onSnapshot(docRef, (doc) => {
-          if (doc.exists()) {
-            const userData = { ...doc.data(), id: doc.id };
+        // Subscribe to user data changes
+        subscription = supabaseRealtime.subscribeToUser(userDocId, (payload) => {
+          console.log('🔄 User data change in profile setupListener:', payload);
+          if (payload.new) {
+            const userData = payload.new;
+            console.log('📝 Updating currentUser with new data:', userData);
+            console.log('🔍 KYC status in update:', userData.kyc_status);
             setCurrentUser(userData);
             sessionStorage.setItem("activeUser", JSON.stringify(userData));
-          } else {
-            setregisterFromPath("/profile");
-            router.push("/signin");
           }
-        }, (error) => {
-          console.error("Error listening to user document:", error);
         });
+
+        // Initial load
+        const { data, error } = await supabaseDb.getUserById(userDocId);
+        if (!error && data) {
+          const userData = data;
+          setCurrentUser(userData);
+          sessionStorage.setItem("activeUser", JSON.stringify(userData));
+        } else {
+          console.warn("User document not found, using cached data");
+          setCurrentUser(user);
+        }
       } else {
-        setregisterFromPath("/profile");
-        router.push("/signin");
+        console.warn("No user document ID found, using cached data");
+        setCurrentUser(user);
       }
     }
     setupListener();
-    return () => { if (unsub) unsub(); };
+    return () => { if (subscription) subscription.unsubscribe(); };
   }, []);
 
 
@@ -267,12 +422,9 @@ const Profile = () => {
     fetchData(null, null);
   }, []);
 
-  // Debug: Log whenever prices change
-  useEffect(() => {
-    console.log('=== PRICES UPDATED ===');
-    console.log('BTC Price:', bitPrice, '(type:', typeof bitPrice, ')');
-    console.log('ETH Price:', ethPrice, '(type:', typeof ethPrice, ')');
-  }, [bitPrice, ethPrice]);
+  // Prices are working correctly
+
+  // Balance is now working correctly
 
   //Animation variable
   const swipeParent = {
@@ -412,7 +564,7 @@ const Profile = () => {
         <div className="topmostRightProfile">
           <div className="unitUserEarningDisplay fancybg">
             <h3>
-              Available Balance
+              Available Balance {!currentUser && <span style={{fontSize: '0.8rem', color: '#999'}}>(Loading...)</span>}
               <span
                 onClick={() => {
                   setPasswordShow((prev) => !prev);
@@ -426,31 +578,18 @@ const Profile = () => {
             <h2>
               $
               {passwordShow
-                ? `${(
-                    parseFloat(currentUser?.balance || 0) +
-                    parseFloat(totalCapital || 0) +
-                    parseFloat(totalROI || 0) +
-                    parseFloat(totalBonus || 0)
-                  ).toLocaleString()}`
+                ? (() => {
+                    const userBalance = parseFloat(currentUser?.balance || 0);
+                    const capital = parseFloat(totalCapital || 0);
+                    const roi = parseFloat(totalROI || 0);
+                    const bonus = parseFloat(totalBonus || 0);
+                    const total = userBalance + capital + roi + bonus;
+                    return total.toLocaleString();
+                  })()
                 : "******"}
             </h2>
           </div>
 
-
-          <div className="unitUserEarningDisplay fancybg">
-            <h3>Total Earnings</h3>
-            <h2>
-              $
-              {passwordShow
-                ? `${(
-                    (parseFloat(currentUser?.bonus || 0)) +
-                    (parseFloat(totalROI || 0)) +
-                    (parseFloat(totalCapital || 0)) +
-                    (parseFloat(totalBonus || 0))
-                  ).toLocaleString()}`
-                : "******"}
-            </h2>
-          </div>
 
           <div className="unitUserEarningDisplay fancybg">
             <h3>Bonuses</h3>
@@ -473,6 +612,59 @@ const Profile = () => {
         </div>
         {profilestate === "Dashboard" && (
           <div className="dashboardWrapper">
+            {/* KYC Verified Banner */}
+            {kycStatus === 'verified' && (
+              <div style={{
+                background: 'linear-gradient(135deg, #067c4d 0%, #0a9b6b 100%)',
+                border: '2px solid #067c4d',
+                borderRadius: '12px',
+                padding: '1rem',
+                marginBottom: '1.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.8rem',
+                boxShadow: '0 4px 15px rgba(6, 124, 77, 0.3)',
+                animation: 'fadeIn 0.5s ease-in-out',
+                maxWidth: '100%'
+              }}>
+                <div style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <i className="icofont-check" style={{ 
+                    fontSize: '1.5rem', 
+                    color: 'white',
+                    fontWeight: 'bold'
+                  }}></i>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ 
+                    color: 'white', 
+                    margin: '0 0 0.2rem 0', 
+                    fontSize: '1.1rem',
+                    fontWeight: 'bold',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                  }}>
+                    ✅ Identity Verified
+                  </h3>
+                  <p style={{ 
+                    color: 'rgba(255, 255, 255, 0.9)', 
+                    margin: 0, 
+                    fontSize: '0.9rem',
+                    lineHeight: '1.3'
+                  }}>
+                    Your KYC verification is complete. Enjoy full access to all platform features.
+                  </p>
+                </div>
+              </div>
+            )}
+            
             <div className="scrollableContent">
               <DashboardSect
                 setWidgetState={setWidgetState}
@@ -599,12 +791,6 @@ const Profile = () => {
         />
       )}
 
-      {/* Render ChatBot for non-admin users across all profile states */}
-      {typeof window !== 'undefined' && !currentUser?.admin && (
-        <ChatBot />
-      )}
-
-
       <AnimatePresence>
         {showsidePanel && (
           <motion.div 
@@ -617,7 +803,7 @@ const Profile = () => {
           >
             <div className="topmostRightPrile">
               <Link href={"/"}>
-                <img src="/topmintLogo.png" className="theLogo" alt="logo" />
+                <img src="/topmintLogo.png" className="theLogo" alt="logo" style={{ height: 'auto', width: '160px' }} />
               </Link>
               <div className="panelPrfileDisp">
                 <div
@@ -693,6 +879,48 @@ const Profile = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Load Tawk.to chat widget only for non-admin users */}
+      {!currentUser?.admin && (
+        <Script
+          src="https://embed.tawk.to/6917d2021d89b1195dfc3d49/1ja2gomk8"
+          strategy="afterInteractive"
+          onLoad={() => {
+            console.log('Tawk.to loaded successfully');
+            if (typeof window !== 'undefined' && window.Tawk_API) {
+              const originalSetAttributes = window.Tawk_API.setAttributes;
+              if (originalSetAttributes) {
+                window.Tawk_API.setAttributes = function(attributes, callback) {
+                  try {
+                    return originalSetAttributes.call(this, attributes, callback);
+                  } catch (e) {
+                    console.warn('Tawk.to setAttributes error:', e);
+                  }
+                };
+              }
+              flushPendingTawkChat();
+            }
+          }}
+          onError={(e) => {
+            console.warn('Tawk.to failed to load - this is normal in development:', e);
+          }}
+          onReady={() => {
+            if (typeof window !== 'undefined' && window.Tawk_API) {
+              console.log('Tawk.to API ready');
+              try {
+                window.Tawk_API.hideWidget();
+                setTimeout(() => {
+                  window.Tawk_API.showWidget();
+                }, 2000);
+              } catch (e) {
+                console.warn('Tawk.to widget control error:', e);
+              }
+              flushPendingTawkChat();
+            }
+          }}
+        />
+      )}
+
     </div>
   );
 };

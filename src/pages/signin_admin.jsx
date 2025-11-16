@@ -2,9 +2,7 @@
 import { useState, useRef, useEffect, useContext } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import app, { db } from '../database/firebaseConfig';
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { supabase, supabaseAuth, supabaseDb } from '../database/supabaseUtils';
 import { themeContext } from '../../providers/ThemeProvider';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -32,8 +30,6 @@ const Signin = () => {
         sessionStorage.clear();
     };
 
-    const colRef = collection(db, "userlogs");
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         setErrMsg("");
@@ -48,38 +44,31 @@ const Signin = () => {
 
         setVerify("verifying");
         try {
-            const auth = getAuth(app);
-            
-            // Sign in with Firebase Auth
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-            
+            // Sign in with Supabase Auth
+            const { data: authData, error: authError } = await supabaseAuth.signIn(email, password);
+            if (authError) throw authError;
+
             // Check if user is admin
-            const q = query(colRef, where("email", "==", email), where("admin", "==", true));
-            const querySnapshot = await getDocs(q);
-            
-            if (querySnapshot.empty) {
+            const { data: userData, error: userError } = await supabaseDb.getUserByEmail(email);
+            if (userError || !userData || !userData.admin) {
                 setErrMsg("Not authorized as admin");
                 setVerify("Default");
-                await auth.signOut(); // Sign out if not admin
+                await supabaseAuth.signOut();
                 return;
             }
-            
+
             // Store admin info
             const adminDoc = {
-                ...querySnapshot.docs[0].data(),
-                uid: user.uid,
-                id: querySnapshot.docs[0].id
+                ...userData,
+                uid: authData.user?.id,
+                isAdmin: true,
+                admin: true
             };
 
             // Set all required storage items
-            localStorage.setItem("adminId", querySnapshot.docs[0].id);
+            localStorage.setItem("adminId", userData.id);
             localStorage.setItem("adminData", JSON.stringify(adminDoc));
-            localStorage.setItem("activeUser", JSON.stringify({
-                ...adminDoc,
-                isAdmin: true,
-                admin: true
-            }));
+            localStorage.setItem("activeUser", JSON.stringify(adminDoc));
             
             setVerify("verified");
             // Use replace to prevent back navigation

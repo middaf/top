@@ -1,71 +1,117 @@
 import React, { useEffect, useState } from 'react';
-import { db } from '../../database/firebaseConfig';
-import { collection, query, onSnapshot, doc, serverTimestamp, runTransaction, updateDoc } from 'firebase/firestore';
-import { addDoc } from 'firebase/firestore';
+import { supabaseDb } from '../../database/supabaseUtils';
+import { supabase } from '../../database/supabaseConfig';
 
 export default function LoansAdmin({ setProfileState, currentUser }) {
   const [loans, setLoans] = useState([]);
 
   useEffect(() => {
-    const q = query(collection(db, 'loans'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setLoans(docs.reverse());
-    });
+    // Initial fetch
+    const fetchLoans = async () => {
+      const { data, error } = await supabase
+        .from('loans')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        setLoans(data);
+      }
+    };
 
-    return () => unsub();
+    fetchLoans();
+
+    // Real-time subscription
+    const channel = supabase
+      .channel('loans_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'loans' }, (payload) => {
+        fetchLoans(); // Refetch on any change
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const changeStatus = async (loanId, newStatus) => {
     try {
-      const loanRef = doc(db, 'loans', loanId);
-      await runTransaction(db, async (transaction) => {
-        const loanSnap = await transaction.get(loanRef);
-        if (!loanSnap.exists()) throw new Error('Loan not found');
-        const loanData = loanSnap.data();
-        if (loanData.status === newStatus) return;
-        transaction.update(loanRef, {
-          status: newStatus,
-          updatedAt: serverTimestamp(),
-          approvedBy: currentUser?.id || null,
-          approvedByName: currentUser?.name || 'Admin'
-        });
-
-        if (newStatus === 'Approved') {
-          if (!loanData.userId) {
-            throw new Error('Loan userId missing. Cannot credit user.');
-          }
-          const userRef = doc(db, 'userlogs', loanData.userId);
-          const userSnap = await transaction.get(userRef);
-          if (!userSnap.exists()) {
-            throw new Error('User document not found for userId: ' + loanData.userId);
-          }
-          const userData = userSnap.data();
-          const prevBalance = parseFloat(userData.balance) || 0;
-          const prevBonus = parseFloat(userData.bonus) || 0;
-          const creditAmount = parseFloat(loanData.amount) || 0;
-          // Add 5% bonus on loan amount
-          const bonusAmount = creditAmount * 0.05;
-          transaction.update(userRef, {
-            balance: prevBalance + creditAmount,
-            bonus: prevBonus + bonusAmount,
-            lastModifiedBy: currentUser?.id || null,
-            lastModifiedAt: serverTimestamp(),
-          });
-        }
+      await supabaseDb.updateLoanStatus(loanId, {
+        status: newStatus,
+        approvedBy: currentUser?.id || null,
+        approvedByName: currentUser?.name || 'Admin'
       });
 
-      // After successful transaction, add a notification for the user
-      try {
-        await addDoc(collection(db, 'notifications'), {
-          idnum: loans.find(l => l.id === loanId)?.idnum || null,
-          userId: loans.find(l => l.id === loanId)?.userId || null,
+      // Add notification
+      const loan = loans.find(l => l.id === loanId);
+      if (loan) {
+        await supabaseDb.createNotification({
+          idnum: loan.idnum,
+          user_id: loan.user_id,
           title: `Loan ${newStatus}`,
           message: `Your loan request has been ${newStatus.toLowerCase()}.`,
-          createdAt: serverTimestamp(),
+          status: 'unseen'
         });
-      } catch (nerr) {
-        console.error('Notification error', nerr);
+
+        // Send email notification to user
+        try {
+          // Get user email from userlogs table
+          const { data: userData, error: userError } = await supabase
+            .from('userlogs')
+            .select('email, name')
+            .eq('idnum', loan.idnum)
+            .single();
+
+          if (!userError && userData?.email) {
+            const emailSubject = `Loan Request ${newStatus} - TopMintInvest`;
+            const emailMessage = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: ${newStatus === 'Approved' ? '#28a745' : '#dc3545'};">${newStatus === 'Approved' ? '✅' : '❌'} Loan Request ${newStatus}</h2>
+                <p>Dear ${userData.name || 'User'},</p>
+                <p>Your loan request has been ${newStatus.toLowerCase()}.</p>
+                ${newStatus === 'Approved' ? `
+                  <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="margin-top: 0;">Loan Details:</h3>
+                    <ul style="list-style: none; padding: 0;">
+                      <li><strong>Amount:</strong> $${loan.amount}</li>
+                      <li><strong>Purpose:</strong> ${loan.purpose || 'Not specified'}</li>
+                      <li><strong>Duration:</strong> ${loan.duration || 'As agreed'}</li>
+                    </ul>
+                  </div>
+                  <p>The loan amount will be credited to your account shortly. Please review the loan terms and conditions.</p>
+                ` : `
+                  <p>If you have any questions about this decision or would like to discuss alternative options, please contact our support team.</p>
+                `}
+                <p>Best regards,<br>TopMintInvest Team</p>
+                <hr>
+                <p style="font-size: 12px; color: #666;">
+                  This is an automated message. Please do not reply to this email.
+                </p>
+              </div>
+            `;
+
+            const emailResponse = await fetch('/api/send-email', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                to: userData.email,
+                subject: emailSubject,
+                message: emailMessage,
+                type: 'loan_status'
+              })
+            });
+
+            if (emailResponse.ok) {
+              console.log('Loan status email sent successfully');
+            } else {
+              console.error('Failed to send loan status email');
+            }
+          }
+        } catch (emailError) {
+          console.error('Error sending loan status email:', emailError);
+          // Don't throw here - email failure shouldn't block loan status update
+        }
       }
 
       alert('Loan updated successfully');
@@ -101,11 +147,11 @@ export default function LoansAdmin({ setProfileState, currentUser }) {
             {loans.map((ln, idx) => (
               <div className="investmentTablehead" key={ln.id}>
                 <div className="unitheadsect">{idx + 1}</div>
-                <div className="unitheadsect">{ln.userName || ln.idnum}</div>
+                <div className="unitheadsect">{ln.user_name || ln.idnum}</div>
                 <div className="unitheadsect">${(ln.amount || 0).toLocaleString()}</div>
                 <div className="unitheadsect">{ln.purpose || '-'}</div>
                 <div className="unitheadsect">{ln.status}</div>
-                <div className="unitheadsect">{ln.createdAt?.toDate ? ln.createdAt.toDate().toLocaleString() : '-'}</div>
+                <div className="unitheadsect">{ln.created_at ? new Date(ln.created_at).toLocaleString() : '-'}</div>
                 <div className="unitheadsect">
                   {ln.status !== 'Approved' && <button onClick={() => changeStatus(ln.id, 'Approved')}>Approve</button>}
                   {ln.status !== 'Declined' && <button onClick={() => changeStatus(ln.id, 'Declined')}>Decline</button>}

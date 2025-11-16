@@ -38,6 +38,15 @@
   background: var(--text-clr1);
 }
 
+/* Force balance display to be visible */
+.balance-display {
+  color: #000000 !important;
+  background: #ffffff !important;
+  background-clip: unset !important;
+  -webkit-background-clip: unset !important;
+  text-shadow: none !important;
+}
+
 
 * {
   box-sizing: border-box;
@@ -413,4 +422,20 @@ video {
     flex: 1;
     min-width: 140px;
   }
+}
+
+/* Animation keyframes for fadeIn effect */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fadeIn {
+  animation: fadeIn 0.5s ease-out;
 }

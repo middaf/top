@@ -211,3 +211,36 @@
         transform: translateY(0);
     }
 }
+
+@media (max-width: 600px) {
+    .chatbotContainer {
+        bottom: 20px;
+        right: 20px;
+    }
+
+    .chatToggle {
+        width: 56px;
+        height: 56px;
+    }
+
+    .chatWindow {
+        width: min(360px, calc(100vw - 32px));
+        height: 65vh;
+        right: -10px;
+        bottom: 70px;
+    }
+
+    .messageContainer {
+        padding: 16px;
+        gap: 10px;
+    }
+
+    .inputContainer input {
+        font-size: 13px;
+        padding: 10px 14px;
+    }
+
+    .inputContainer button {
+        padding: 8px 16px;
+    }
+}

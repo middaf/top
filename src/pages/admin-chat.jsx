@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { supabaseAuth } from '../database/supabaseUtils';
 import { useRouter } from 'next/router';
 import AdminChat from '../components/ChatBot/AdminChat';
-import app from '../database/firebaseConfig';
 
 export default function AdminChatPage() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
-    const auth = getAuth(app);
 
     useEffect(() => {
         let mounted = true;
-        
+
         const checkAdminStatus = async () => {
             try {
                 const adminData = JSON.parse(localStorage.getItem('adminData') || 'null');
-                const user = auth.currentUser;
+                const { data: { user }, error } = await supabaseAuth.getCurrentUser();
 
-                if (!user) {
+                if (error || !user) {
                     if (mounted) {
                         setLoading(false);
                         router.replace('/signin_admin');

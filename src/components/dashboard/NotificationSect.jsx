@@ -1,17 +1,12 @@
 import {useEffect, useState} from "react";
-import { db } from "../../database/firebaseConfig";
-import { doc, updateDoc } from "firebase/firestore";
+import { supabaseDb } from "../../database/supabaseUtils";
 
 const NotificationSect = ({ setWidgetState, setInvestData, currentUser, notifications}) => {
     // use shared db instance
 
 
-    const handleDetailUpdate = (vlad) => {
-      const docRef = doc(db, "notifications", vlad?.id)
-
-      updateDoc(docRef, {
-        status: "seen",
-      });
+    const handleDetailUpdate = async (vlad) => {
+      await supabaseDb.updateNotification(vlad?.id, { status: "seen" });
     };
 
     useEffect(() => {
@@ -62,14 +57,14 @@ const NotificationSect = ({ setWidgetState, setInvestData, currentUser, notifica
                 <div className="historyTable">
                     {
                         notifications.sort((a, b) => {
-                          const dateA = new Date(a.dateTime);
-                          const dateB = new Date(b.dateTime);
+                          const dateA = new Date(a.created_at);
+                          const dateB = new Date(b.created_at);
                         
                           return dateB - dateA;
                         }) .map((elem, idx) => (
                             <div className="unitNotif" key={`${elem.idnum}-notiUser${idx}`}>
                                 <h4>{elem?.message}</h4>
-                                <p>{new Date(elem?.dateTime).toLocaleDateString("en-US", {
+                                <p>{new Date(elem?.created_at).toLocaleDateString("en-US", {
                                     day: "numeric",
                                     month: "short",
                                     year: "numeric",
@@ -77,7 +72,7 @@ const NotificationSect = ({ setWidgetState, setInvestData, currentUser, notifica
                                     hour: '2-digit',
                                     minute: '2-digit',
                                     hour12: false,
-                                  }).format(new Date(elem?.dateTime))}</p>
+                                  }).format(new Date(elem?.created_at))}</p>
                             </div>
                         ))
                     }

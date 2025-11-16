@@ -1,6 +1,5 @@
 import {useEffect, useState} from "react";
-import { db } from "../../database/firebaseConfig";
-import { doc, deleteDoc, query, where, collection, onSnapshot } from "firebase/firestore";
+import { supabaseDb, supabaseRealtime } from "../../database/supabaseUtils";
 import { useRouter } from 'next/router';
 
 
@@ -11,34 +10,6 @@ const DynamicWidget = ({widgetState, setWidgetState, currentUser, setCurrentUser
     const handlewidgetClose = () => {
         setWidgetState({...widgetState, state: false});
     };
-
-    const colRef = collection(db, "investments");
-
-    const getSingleDoc = () => {
-        if (!currentUser?.idnum) {
-            console.error('No user ID found');
-            return;
-        }
-
-        try {
-            const q = query(colRef, where("idnum", "==", currentUser.idnum));
-            
-            return onSnapshot(q, 
-                (snapshot) => {
-                    const books = snapshot.docs.map(doc => ({
-                        ...doc.data(),
-                        id: doc.id
-                    }));
-                    setInvestments(books);
-                },
-                (error) => {
-                    console.error("Error fetching investments:", error);
-                }
-            );
-        } catch (error) {
-            console.error("Error setting up investment listener:", error);
-        }
-    }
 
     const handleProceed = (e) => {
         e.preventDefault();
@@ -53,12 +24,29 @@ const DynamicWidget = ({widgetState, setWidgetState, currentUser, setCurrentUser
     };
 
     useEffect(() => {
-        const unsubscribe = getSingleDoc();
-        
+        let channel = null;
+
+        if (currentUser?.idnum) {
+            try {
+                channel = supabaseRealtime.subscribeToInvestments(currentUser.idnum,
+                    (payload) => {
+                        // Refresh investments data when there's a change
+                        supabaseDb.getInvestmentsByIdnum(currentUser.idnum).then(({ data, error }) => {
+                            if (!error && data) {
+                                setInvestments(data);
+                            }
+                        });
+                    }
+                );
+            } catch (error) {
+                console.error("Error setting up investment listener:", error);
+            }
+        }
+
         // Cleanup subscription on unmount
         return () => {
-            if (unsubscribe) {
-                unsubscribe();
+            if (channel && typeof channel.unsubscribe === 'function') {
+                channel.unsubscribe();
             }
         };
     }, [currentUser?.idnum]);
@@ -70,8 +58,7 @@ const DynamicWidget = ({widgetState, setWidgetState, currentUser, setCurrentUser
         }
 
         try {
-            const docRef = doc(db, "userlogs", currentUser.id);
-            await deleteDoc(docRef);
+            await supabaseDb.deleteUser(currentUser.id);
             router.push("/signup");
         } catch (error) {
             console.error("Error deleting account:", error);
@@ -143,7 +130,7 @@ const DynamicWidget = ({widgetState, setWidgetState, currentUser, setCurrentUser
                         <p style={{fontSize: '0.9rem', color: '#666', marginBottom: '24px', textAlign: 'center'}}>
                             Enter the 6-digit code provided by admin
                         </p>
-                        <form className='widgetInvestForm' onSubmit={(e) => {
+                        <form className='widgetInvestForm withdraw-code-form' onSubmit={(e) => {
                             e.preventDefault();
                             const code = (withdrawData?.code || '').replace(/\s/g, '');
                             if (!code || code.length !== 6) {
@@ -180,12 +167,7 @@ const DynamicWidget = ({widgetState, setWidgetState, currentUser, setCurrentUser
                                     fontSize: '1rem',
                                     textAlign: 'center'
                                 }}>Withdrawal Code</label>
-                                <div style={{
-                                    display: 'flex',
-                                    gap: '8px',
-                                    justifyContent: 'center',
-                                    marginBottom: '8px'
-                                }}>
+                                <div className="withdraw-code-grid">
                                     {[0, 1, 2, 3, 4, 5].map((index) => (
                                         <input
                                             key={index}
@@ -412,19 +394,7 @@ const DynamicWidget = ({widgetState, setWidgetState, currentUser, setCurrentUser
                                                 const nextIndex = Math.min(pastedData.length, 5);
                                                 document.getElementById(`withdraw-code-${nextIndex}`)?.focus();
                                             }}
-                                            style={{
-                                                width: '48px',
-                                                height: '56px',
-                                                fontSize: '1.6rem',
-                                                textAlign: 'center',
-                                                border: '2px solid #ddd',
-                                                borderRadius: '8px',
-                                                outline: 'none',
-                                                transition: 'all 0.2s',
-                                                fontWeight: '700',
-                                                backgroundColor: '#fff',
-                                                color: '#333'
-                                            }}
+                                            className="withdraw-code-input"
                                             onFocus={(e) => {
                                                 e.target.style.borderColor = '#0672CD';
                                                 e.target.style.boxShadow = '0 0 0 3px rgba(6, 114, 205, 0.15)';

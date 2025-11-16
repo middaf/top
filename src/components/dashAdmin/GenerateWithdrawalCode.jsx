@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { db } from "../../database/firebaseConfig";
-import { collection, addDoc } from "firebase/firestore";
+import { supabaseDb } from "../../database/supabaseUtils";
 
 const GenerateWithdrawalCode = ({ onClose }) => {
     const [userId, setUserId] = useState('');
@@ -10,13 +9,16 @@ const GenerateWithdrawalCode = ({ onClose }) => {
     const [isGenerating, setIsGenerating] = useState(false);
 
     const generateRandomCode = () => {
-        // Generate a random 8-character alphanumeric code
-        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let code = '';
-        for (let i = 0; i < 8; i++) {
-            code += characters.charAt(Math.floor(Math.random() * characters.length));
+        const MIN = 100000;
+        const MAX = 999999;
+        if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+            const array = new Uint32Array(1);
+            window.crypto.getRandomValues(array);
+            const random = array[0] / (0xffffffff + 1);
+            return Math.floor(random * (MAX - MIN + 1) + MIN).toString();
         }
-        return code;
+        const fallback = Math.floor(Math.random() * (MAX - MIN + 1) + MIN);
+        return fallback.toString();
     };
 
     const handleSubmit = async (e) => {
@@ -33,15 +35,12 @@ const GenerateWithdrawalCode = ({ onClose }) => {
 
         try {
             const code = generateRandomCode();
-            const codesRef = collection(db, 'withdrawalCodes');
             
-            await addDoc(codesRef, {
+            await supabaseDb.createWithdrawalCode({
                 code,
-                userId,
+                user_id: userId,
                 amount: parseFloat(amount),
-                createdAt: new Date().toISOString(),
-                used: false,
-                usedAt: null
+                used: false
             });
 
             setSuccess(`Code ${code} generated successfully for user ${userId}`);

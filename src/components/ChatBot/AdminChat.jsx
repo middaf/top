@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { db } from '../../database/firebaseConfig';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, where } from 'firebase/firestore';
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '../../database/supabaseConfig';
+import { supabaseDb } from '../../database/supabaseUtils';
 import { useRouter } from 'next/router';
 import styles from './AdminChat.module.css';
 
@@ -12,7 +12,7 @@ export default function AdminChat() {
     const [inputMessage, setInputMessage] = useState('');
     const [userMessages, setUserMessages] = useState([]);
     const [isMobileView, setIsMobileView] = useState(false);
-    const messageListRef = useState(null);
+    const messageListRef = useRef(null);
 
     const handleDashboardClick = () => {
         router.push('/dashboard_admin');
@@ -45,67 +45,147 @@ export default function AdminChat() {
 
     useEffect(() => {
         // Subscribe to get unique users who have messages
-        const q = query(
-            collection(db, 'chats'),
-            orderBy('timestamp', 'desc')
-        );
+        console.log('Setting up all-chats subscription...');
+        const channel = supabase
+            .channel('all-chats')
+            .on('postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'chats'
+                },
+                (payload) => {
+                    console.log('All-chats subscription triggered:', payload);
+                    // Refresh all chat messages and extract unique users
+                    supabase
+                        .from('chats')
+                        .select('*')
+                        .order('timestamp', { ascending: false })
+                        .then(({ data, error }) => {
+                            if (!error && data) {
+                                const uniqueUsers = new Set();
+                                const userMap = new Map();
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const uniqueUsers = new Set();
-            const userMap = new Map();
+                                data.forEach(msg => {
+                                    if (msg && msg.user_id && !msg.is_admin) {
+                                        uniqueUsers.add(msg.user_id);
+                                        // Store most recent message for user preview
+                                        if (!userMap.has(msg.user_id)) {
+                                            userMap.set(msg.user_id, {
+                                                lastMessage: msg.message || '',
+                                                timestamp: msg.timestamp
+                                            });
+                                        }
+                                    }
+                                });
 
-            snapshot.docs.forEach(doc => {
-                const data = doc.data();
-                if (data.userId && !data.isAdmin) {
-                    uniqueUsers.add(data.userId);
-                    // Store most recent message for user preview
-                    if (!userMap.has(data.userId)) {
-                        userMap.set(data.userId, {
-                            lastMessage: data.message,
-                            timestamp: data.timestamp
+                                setUsers(Array.from(uniqueUsers).map(userId => ({
+                                    id: userId,
+                                    lastMessage: userMap.get(userId)?.lastMessage || '',
+                                    timestamp: userMap.get(userId)?.timestamp
+                                })));
+                            } else if (error) {
+                                console.error('Error fetching chat messages:', error);
+                            }
+                        }).catch(err => {
+                            console.error('Error in chat subscription:', err);
                         });
-                    }
+                }
+            );
+
+        channel.subscribe((status) => {
+            console.log('All-chats subscription status:', status);
+        });
+
+        // Initial load
+        supabase
+            .from('chats')
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .then(({ data, error }) => {
+                if (!error && data) {
+                    const uniqueUsers = new Set();
+                    const userMap = new Map();
+
+                    data.forEach(msg => {
+                        if (msg.user_id && !msg.is_admin) {
+                            uniqueUsers.add(msg.user_id);
+                            // Store most recent message for user preview
+                            if (!userMap.has(msg.user_id)) {
+                                userMap.set(msg.user_id, {
+                                    lastMessage: msg.message,
+                                    timestamp: msg.timestamp
+                                });
+                            }
+                        }
+                    });
+
+                    setUsers(Array.from(uniqueUsers).map(userId => ({
+                        id: userId,
+                        lastMessage: userMap.get(userId)?.lastMessage || '',
+                        timestamp: userMap.get(userId)?.timestamp
+                    })));
                 }
             });
 
-            setUsers(Array.from(uniqueUsers).map(userId => ({
-                id: userId,
-                lastMessage: userMap.get(userId)?.lastMessage || '',
-                timestamp: userMap.get(userId)?.timestamp
-            })));
-        });
-
-        return () => unsubscribe();
+        return () => {
+            console.log('Unsubscribing from all-chats');
+            try {
+                channel.unsubscribe();
+            } catch (err) {
+                console.error('Error unsubscribing from all-chats:', err);
+            }
+        };
     }, []);
 
     useEffect(() => {
         if (!selectedUser) return;
 
         // Subscribe to messages for selected user
-        const q = query(
-            collection(db, 'chats'),
-            where('userId', '==', selectedUser),
-            orderBy('timestamp', 'asc')
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const userMessages = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                isWithdrawalRequest: doc.data().type === 'withdrawal-request'
-            }));
-            setMessages(userMessages);
-            
-            // Scroll to bottom after messages update
-            setTimeout(() => {
-                const messageList = document.querySelector(`.${styles.messageList}`);
-                if (messageList) {
-                    messageList.scrollTop = messageList.scrollHeight;
+        const unsubscribe = supabaseDb.subscribeToChatMessages(selectedUser, (payload) => {
+            console.log('User chat subscription triggered:', payload);
+            // Refresh messages when there's a change
+            supabaseDb.getChatMessages(selectedUser).then(({ data, error }) => {
+                if (!error && data) {
+                    const userMessages = data.map(msg => ({
+                        id: msg.id,
+                        ...msg,
+                        isWithdrawalRequest: msg.type === 'withdrawal-request'
+                    }));
+                    setMessages(userMessages);
+                } else if (error) {
+                    console.error('Error fetching user messages:', error);
                 }
-            }, 100);
+            }).catch(err => {
+                console.error('Error in user chat subscription:', err);
+            });
         });
 
-        return () => unsubscribe();
+        // Initial load
+        supabaseDb.getChatMessages(selectedUser).then(({ data, error }) => {
+            if (!error && data) {
+                const userMessages = data.map(msg => ({
+                    id: msg.id,
+                    ...msg,
+                    isWithdrawalRequest: msg.type === 'withdrawal-request'
+                }));
+                setMessages(userMessages);
+            } else if (error) {
+                console.error('Error loading initial user messages:', error);
+                setMessages([]);
+            }
+        }).catch(err => {
+            console.error('Error loading initial messages:', err);
+            setMessages([]);
+        });
+
+        return () => {
+            try {
+                unsubscribe();
+            } catch (err) {
+                console.error('Error unsubscribing from user chat:', err);
+            }
+        };
     }, [selectedUser]);
 
     const generateWithdrawalCode = async (userId, amount) => {
@@ -129,16 +209,15 @@ export default function AdminChat() {
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes from now
 
-            // Store the code in Firestore with retries
+            // Store the code in Supabase with retries
             let retries = 3;
             while (retries > 0) {
                 try {
-                    await addDoc(collection(db, 'withdrawalCodes'), {
+                    await supabaseDb.createWithdrawalCode({
                         code,
-                        userId,
+                        user_id: userId,
                         amount: parseFloat(amount),
-                        createdAt: serverTimestamp(),
-                        expiresAt,
+                        expires_at: expiresAt.toISOString(),
                         used: false,
                         status: 'active'
                     });
@@ -151,25 +230,21 @@ export default function AdminChat() {
             }
 
             // Send the code in chat with amount formatting
-            await addDoc(collection(db, 'chats'), {
+            await supabaseDb.addChatMessage({
                 message: `Your withdrawal code is: ${code}\nThis code will expire in 15 minutes.\nAmount: $${parseFloat(amount).toLocaleString('en-US', {minimumFractionDigits: 2})}`,
-                userId,
-                recipientId: userId,
-                senderUserId: 'admin',
-                userName: 'Admin',
-                timestamp: serverTimestamp(),
-                isAdmin: true,
+                user_id: userId,
+                user_name: 'Admin',
+                is_admin: true,
                 type: 'withdrawal-code'
             });
 
             // Create a notification for the user
-            await addDoc(collection(db, 'notifications'), {
-                userId,
+            await supabaseDb.createNotification({
+                idnum: userId,
                 type: 'withdrawal_code',
                 title: 'Withdrawal Code Generated',
                 message: `A withdrawal code has been generated for your request of $${parseFloat(amount).toLocaleString('en-US', {minimumFractionDigits: 2})}. Check your chat messages.`,
-                status: 'unseen',
-                timestamp: serverTimestamp()
+                status: 'unseen'
             });
         } catch (error) {
             console.error('Error generating code:', error);
@@ -182,15 +257,12 @@ export default function AdminChat() {
         if (!inputMessage.trim() || !selectedUser) return;
 
         try {
-            // Add admin message to Firestore
-            await addDoc(collection(db, 'chats'), {
+            // Add admin message to Supabase
+            await supabaseDb.addChatMessage({
                 message: inputMessage.trim(),
-                userId: selectedUser, // Set recipient user ID
-                recipientId: selectedUser,
-                senderUserId: 'admin',
-                userName: 'Admin',
-                timestamp: serverTimestamp(),
-                isAdmin: true
+                user_id: selectedUser,
+                user_name: 'Admin',
+                is_admin: true
             });
             setInputMessage('');
         } catch (error) {

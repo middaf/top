@@ -5,13 +5,17 @@ export const getKycStatus = async (userId) => {
   if (!userId) return null;
   
   try {
-    const userRef = doc(db, 'userlogs', userId);
-    const userDoc = await getDoc(userRef);
+    const { data, error } = await supabase
+      .from('userlogs')
+      .select('kyc_status')
+      .eq('id', userId)
+      .single();
     
-    if (userDoc.exists()) {
-      return userDoc.data().kycStatus || null;
+    if (error) {
+      console.error('Error getting KYC status:', error);
+      return null;
     }
-    return null;
+    return data?.kyc_status || null;
   } catch (error) {
     console.error('Error getting KYC status:', error);
     return null;

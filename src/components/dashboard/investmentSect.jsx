@@ -1,4 +1,5 @@
 
+import styles from "./DashboardSect.module.css";
 
 const InvestmentSect = ({ setWidgetState, setInvestData, currentUser, investments}) => {
   const currentDate = new Date();
@@ -66,7 +67,7 @@ const InvestmentSect = ({ setWidgetState, setInvestData, currentUser, investment
             ) : (
 
                 <div className="emptyTable">
-                    <i class="icofont-exclamation-tringle"></i>
+                    <i className="icofont-exclamation-tringle"></i>
                     <p>
                         Your investment history is currently empty.{" "}
                         <a href="#packages">Invest now</a>
@@ -74,87 +75,101 @@ const InvestmentSect = ({ setWidgetState, setInvestData, currentUser, investment
                 </div>
             )
         }
-        <section className="packages" id="packages">
-          <h2>Our Available Packages</h2>
-          <div className="packagesCntn">
-            <div className="unitPackage">
-              <h3>SILVER</h3>
-              <h4>
-                <span>$100</span> <br /> - <br /> <span>$900</span>
-              </h4>
-              <ul>
-                <li>
-                  <i className="icofont-tick-mark"></i> <span>5X ROI</span>
-                </li>
-                <li>
-                  <i className="icofont-tick-mark"></i>{" "}
-                  <span>5X bonus on investment</span>
-                </li>
-                <li>
-                  <i className="icofont-tick-mark"></i>{" "}
-                  <span>Get ROI and bonus in 2 Days</span>
-                </li>
-              </ul>
-              <button className="borderBtn" onClick={() => {investProcess("Silver", 100, 2)}}>
-                Invest
-              </button>
+        <section className={styles.packages} id="packages">
+          <h2 className={styles.packagesTitle}>Our Available Packages</h2>
+        <div className={styles.packageGrid}>
+          <div className={styles.packageCard}>
+            <div className={styles.packageTitle}>SILVER</div>
+            <div className={styles.packagePrice}>
+              <span>$100</span> - <span>$900</span>
             </div>
-            <div className="unitPackage fancybg">
-              <h3>
-                DIAMOND <i class="icofont-diamond"></i>
-              </h3>
-              <h4>
-                <span>$10,000</span> <br /> - <br /> <span>$100,000</span>
-              </h4>
-              <ul>
-                <li>
-                  <i className="icofont-tick-mark"></i> <span>5X ROI</span>
-                </li>
-                <li>
-                  <i className="icofont-tick-mark"></i>{" "}
-                  <span>10X Bonus on investment</span>
-                </li>
-                <li>
-                  <i className="icofont-tick-mark"></i>{" "}
-                  <span>Get ROI and bonus in 7 Days</span>
-                </li>
-                <li>
-                  <i className="icofont-tick-mark"></i>{" "}
-                  <span>Access to 15 of our digital financial resources</span>
-                </li>
-              </ul>
-              <button className="fancyBtn" onClick={() => {investProcess("Diamond", 10000, 7)}}>
-                Get Rich
-              </button>
-            </div>
-            <div className="unitPackage">
-              <h3>GOLD</h3>
-              <h4>
-                <span>$1,000</span> <br /> - <br /> <span>$9,000</span>
-              </h4>
-              <ul>
-                <li>
-                  <i className="icofont-tick-mark"></i> <span>5X ROI</span>
-                </li>
-                <li>
-                  <i className="icofont-tick-mark"></i>{" "}
-                  <span>8X Bonus on investment</span>
-                </li>
-                <li>
-                  <i className="icofont-tick-mark"></i>{" "}
-                  <span>Get ROI and bonus in 4 Days</span>
-                </li>
-                <li>
-                  <i className="icofont-tick-mark"></i>{" "}
-                  <span>Access to 5 of our digital financial resources</span>
-                </li>
-              </ul>
-              <button className="borderBtn" onClick={() => {investProcess("Gold", 1000, 5)}}>
-                Invest
-              </button>
-            </div>
+            <ul className={styles.featureList}>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>5X ROI</span>
+              </li>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>5X bonus on investment</span>
+              </li>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>Get ROI and bonus in 2 Days</span>
+              </li>
+            </ul>
+            <button 
+              className={`${styles.investButton} ${styles.standardButton}`}
+              onClick={() => {investProcess("Silver", 100, 2)}}
+            >
+              Start Investing
+            </button>
           </div>
-        </section>
+
+          <div className={`${styles.packageCard} ${styles.diamond}`}>
+            <div className={styles.packageTitle}>
+              DIAMOND <i className="icofont-diamond"></i>
+            </div>
+            <div className={styles.packagePrice}>
+              <span>$10,000</span> - <span>$100,000</span>
+            </div>
+            <ul className={styles.featureList}>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>5X ROI</span>
+              </li>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>10X Bonus on investment</span>
+              </li>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>Get ROI and bonus in 7 Days</span>
+              </li>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>Access to 15 digital financial resources</span>
+              </li>
+            </ul>
+            <button 
+              className={`${styles.investButton} ${styles.diamondButton}`}
+              onClick={() => {investProcess("Diamond", 10000, 7)}}
+            >
+              Premium Investment
+            </button>
+          </div>
+
+          <div className={styles.packageCard}>
+            <div className={styles.packageTitle}>GOLD</div>
+            <div className={styles.packagePrice}>
+              <span>$1,000</span> - <span>$9000</span>
+            </div>
+            <ul className={styles.featureList}>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>5X ROI</span>
+              </li>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>8X Bonus on investment</span>
+              </li>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>Get ROI and bonus in 4 Days</span>
+              </li>
+              <li className={styles.featureItem}>
+                <i className={`icofont-tick-mark ${styles.featureIcon}`}></i>
+                <span className={styles.featureText}>Access to 5 digital financial resources</span>
+              </li>
+            </ul>
+            <button 
+              className={`${styles.investButton} ${styles.standardButton}`}
+              onClick={() => {investProcess("Gold", 1000, 5)}}
+            >
+              Start Investing
+            </button>
+          </div>
+        </div>
+      </section>
       </div>
     </div>
   );

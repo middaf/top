@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { db } from '../../database/firebaseConfig';
-import { collection, addDoc, query, where, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { supabase, supabaseRealtime } from '../../database/supabaseUtils';
 import styles from './LoanSect.module.css';
 
 export default function LoanSect({ currentUser }) {
   const [loans, setLoans] = useState([]);
   const [formStep, setFormStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const formatLoanDate = (timestamp) => {
+    if (!timestamp) return '-';
+    try {
+      return new Date(timestamp).toLocaleString();
+    } catch (error) {
+      console.warn('Unable to format loan date:', error);
+      return '-';
+    }
+  };
   
   // Form state
   const [loanData, setLoanData] = useState({
@@ -49,13 +57,36 @@ export default function LoanSect({ currentUser }) {
   useEffect(() => {
     if (!currentUser?.idnum) return;
 
-    const q = query(collection(db, 'loans'), where('idnum', '==', currentUser.idnum));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setLoans(docs.reverse());
+    const fetchLoans = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('loans')
+          .select('*')
+          .eq('idnum', currentUser.idnum)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          setLoans(data);
+        } else if (error) {
+          console.error('Loan fetch error:', error);
+        }
+      } catch (error) {
+        console.error('Unexpected error fetching loans:', error);
+      }
+    };
+
+    fetchLoans();
+
+    // Set up real-time subscription for loans
+    const subscription = supabaseRealtime.subscribeToLoans(currentUser.idnum, (payload) => {
+      console.log('Loan change:', payload);
+      // Refresh loans when there's a change
+      fetchLoans();
     });
 
-    return () => unsub();
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
   }, [currentUser?.idnum]);
 
   const handleInputChange = (e, section = null, index = null) => {
@@ -108,17 +139,19 @@ export default function LoanSect({ currentUser }) {
 
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'loans'), {
+      const loanSubmitData = {
         ...loanData,
         amount: Number(loanData.amount),
         monthlyIncome: Number(loanData.monthlyIncome) || 0,
         collateralValue: Number(loanData.collateralValue) || 0,
         idnum: currentUser.idnum,
-        userId: currentUser.id || null,
-        userName: currentUser.name || '',
-        status: 'Pending',
-        createdAt: serverTimestamp(),
-      });
+        user_id: currentUser.id || null,
+        user_name: currentUser.name || '',
+        status: 'Pending'
+      };
+
+      const { error } = await supabaseDb.createLoan(loanSubmitData);
+      if (error) throw error;
       
       setLoanData({
         amount: '',
@@ -559,11 +592,10 @@ export default function LoanSect({ currentUser }) {
             {loans.map((ln, idx) => (
               <div className="investmentTablehead" key={ln.id}>
                 <div className="unitheadsect">{idx + 1}</div>
-                <div className="unitheadsect">${(ln.amount || 0).toLocaleString()}</div>
+                <div className="unitheadsect">${Number(ln.amount || 0).toLocaleString()}</div>
                 <div className="unitheadsect">{ln.purpose || '-'}</div>
-                <div className="unitheadsect">{ln.status}</div>
-                <div className="unitheadsect">{ln.createdAt?.toDate ? ln.createdAt.toDate().toLocaleString() : '-'}
-                </div>
+                <div className="unitheadsect">{ln.status || 'Pending'}</div>
+                <div className="unitheadsect">{formatLoanDate(ln.created_at)}</div>
               </div>
             ))}
           </div>

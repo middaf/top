@@ -1,15 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, useContext, useEffect, useLayoutEffect } from "react";
 import Link from "next/link";
-import { db } from "../database/firebaseConfig";
-import {
-  collection,
-  where,
-  query,
-  onSnapshot,
-  doc,
-  getDoc
-} from "firebase/firestore";
+import { supabaseDb, supabaseRealtime } from "../database/supabaseUtils";
+import { supabase } from "../database/supabaseConfig";
 import { useRouter } from "next/router";
 import DynamicWidget from "../components/dashboard/dynamicWidget";
 import { themeContext } from "../../providers/ThemeProvider";
@@ -23,7 +16,6 @@ import Head from "next/head";
 import Image from 'next/image';
 import PaymentSect from "../components/dashboard/PaymentSect";
 import WithdrawalPayment from "../components/dashboard/WithdrawPayment";
-import AdminChat from "../components/ChatBot/AdminChat";
 import LoansAdmin from "../components/dashAdmin/LoansAdmin";
 import KycAdmin from "../components/dashAdmin/KycAdmin";
 
@@ -42,7 +34,6 @@ export default function DashboardAdmin() {
   const [activeUsers, setActiveUsers] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
   const [showSidePanel, setShowSidePanel] = useState(false);
-  const [unreadMessages, setUnreadMessages] = useState(0);
   // Initialize default state as variables to avoid object literal syntax issues
   const defaultName = "";
   const defaultAvatar = "avatar_1";
@@ -107,22 +98,18 @@ export default function DashboardAdmin() {
           return;
         }
 
-        // Verify admin exists in Firestore
-        const adminRef = doc(db, "userlogs", adminId);
-        const adminDoc = await getDoc(adminRef);
+        // Verify admin exists in Supabase
+        const { data: supabaseAdminData, error: adminError } = await supabaseDb.getUserById(adminId);
 
-        if (!adminDoc.exists() || !adminDoc.data().admin) {
+        if (adminError || !supabaseAdminData || !supabaseAdminData.admin) {
           localStorage.clear();
           router.replace("/signin_admin");
           return;
         }
 
         // Everything is valid, update local storage with fresh data
-        // Get admin data
-        const adminDocData = adminDoc.data();
         const freshAdminData = {
-          ...adminDocData,
-          id: adminDoc.id,
+          ...supabaseAdminData,
           isAdmin: true,
           admin: true,
           date: new Date().toISOString().split("T")[0]
@@ -152,64 +139,70 @@ export default function DashboardAdmin() {
   }, [router]);
 
   // Fetch investments, users, and withdrawals
+  // Fetch investments, users, and withdrawals
   useEffect(() => {
+    let mounted = true;
+
     // Fetch investments
-    const investmentsQuery = query(collection(db, 'investments'));
-    const investmentsSub = onSnapshot(investmentsQuery, (snapshot) => {
-      const investmentsData = snapshot.docs.map((doc) => {
-        return {
-          ...doc.data(),
-          id: doc.id
-        };
-      });
-      setInvestments(investmentsData);
-    });
+    const fetchInvestments = async () => {
+      const { data, error } = await supabaseDb.getAllInvestments();
+      if (!error && mounted) {
+        setInvestments(data || []);
+      }
+    };
 
     // Fetch users
-    const usersQuery = query(collection(db, 'userlogs'));
-    const usersSub = onSnapshot(usersQuery, (snapshot) => {
-      const usersData = snapshot.docs.map((doc) => {
-        return {
-          ...doc.data(),
-          id: doc.id
-        };
-      });
-      setActiveUsers(usersData);
-    });
+    const fetchUsers = async () => {
+      const { data, error } = await supabaseDb.getAllUsers();
+      if (!error && mounted) {
+        setActiveUsers(data || []);
+      }
+    };
 
     // Fetch withdrawals
-    const withdrawalsQuery = query(collection(db, 'withdrawals'));
-    const withdrawalsSub = onSnapshot(withdrawalsQuery, (snapshot) => {
-      const withdrawalsData = snapshot.docs.map((doc) => {
-        return {
-          ...doc.data(),
-          id: doc.id
-        };
-      });
-      setWithdrawals(withdrawalsData);
-    });
-
-    // Cleanup subscriptions
-    return () => {
-      investmentsSub();
-      usersSub();
-      withdrawalsSub();
+    const fetchWithdrawals = async () => {
+      console.log('supabaseDb object:', supabaseDb);
+      console.log('getAllWithdrawals function:', supabaseDb.getAllWithdrawals);
+      
+      if (typeof supabaseDb.getAllWithdrawals !== 'function') {
+        console.error('getAllWithdrawals is not a function');
+        return;
+      }
+      
+      const { data, error } = await supabaseDb.getAllWithdrawals();
+      if (!error && mounted) {
+        setWithdrawals(data || []);
+      }
     };
-  }, []);
 
-  // Check for unread messages
-  useEffect(() => {
-    const q = query(
-      collection(db, 'chats'),
-      where('isRead', '==', false),
-      where('isAdmin', '==', false)
-    );
+    // Initial fetch
+    fetchInvestments();
+    fetchUsers();
+    fetchWithdrawals();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUnreadMessages(snapshot.docs.length);
+    // Set up real-time subscriptions
+    const investmentsSubscription = supabaseRealtime.subscribeToAllInvestments((payload) => {
+      console.log('Real-time investment update received:', payload);
+      if (mounted) fetchInvestments();
     });
 
-    return () => unsubscribe();
+    const usersSubscription = supabaseRealtime.subscribeToAllUsers((payload) => {
+      console.log('Real-time user update received:', payload);
+      if (mounted) fetchUsers();
+    });
+
+    const withdrawalsSubscription = supabaseRealtime.subscribeToAllWithdrawals((payload) => {
+      console.log('Real-time withdrawal update received:', payload);
+      if (mounted) fetchWithdrawals();
+    });
+
+    // Cleanup function
+    return () => {
+      mounted = false;
+      investmentsSubscription?.unsubscribe();
+      usersSubscription?.unsubscribe();
+      withdrawalsSubscription?.unsubscribe();
+    };
   }, []);
 
   // Functions
@@ -272,54 +265,11 @@ export default function DashboardAdmin() {
     type: "avatar",
   });
 
-  // Fetch investments
-  useEffect(() => {
-    const colRef = collection(db, "investments");
-    const q = query(colRef, where("admin", "==", false));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const books = snapshot.docs.map((doc) => ({
-        ...doc.data(),
-        id: doc.id
-      }));
-      setInvestments(books);
-    });
 
-    return () => unsubscribe();
-  }, []);
 
-  // Fetch users
-  useEffect(() => {
-    const colRefNotif = collection(db, "userlogs");
-    const q2 = query(colRefNotif, where("admin", "==", false));
 
-    const unsubscribe = onSnapshot(q2, (snapshot) => {
-      const utilNotif = snapshot.docs.map((doc) => ({
-        ...doc.data(),
-        password: "******",
-        id: doc.id
-      }));
-  setActiveUsers(utilNotif);
-    });
 
-    return () => unsubscribe();
-  }, []);
-
-  // Fetch withdrawals
-  useEffect(() => {
-    const colRefWith = collection(db, "withdrawals");
-    const q3 = query(colRefWith, where("admin", "==", false));
-
-    const unsubscribe = onSnapshot(q3, (snapshot) => {
-      const withdrawalList = snapshot.docs.map((doc) => ({
-        ...doc.data(),
-        id: doc.id
-      }));
-      setWithdrawals(withdrawalList);
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   // Fetch crypto prices with retries and fallback
   async function fetchCryptoPrice(coin) {
@@ -372,25 +322,7 @@ export default function DashboardAdmin() {
     setShowSidePanel(false);
   }, [profilestate, router]);
 
-  useLayoutEffect(() => {
-    const user = JSON.parse(localStorage.getItem("activeUser")) || {};
-    if (user.id) {
-      const docRef = doc(db, "userlogs", user.id);
 
-      getDoc(docRef).then((doc) => {
-        if (doc.data() && doc.data().admin) {
-          setCurrentUser({...doc.data(), id: doc.id});
-          localStorage.setItem("activeUser", JSON.stringify({...doc.data(), id: doc.id}));
-        } else {
-          setregisterFromPath("/profile");
-          router.push("/signin");
-        }
-      })
-    } else {
-      setregisterFromPath("/profile");
-      router.push("/signin");
-    }
-  }, []);
 
 
   //user dashboard values
@@ -458,7 +390,7 @@ export default function DashboardAdmin() {
       <div id="mobilenone" className="leftProfile">
         <div className="topmostRightPrile">
             <Link href="/">
-              <Image src="/topmintLogo.png" className="theLogo" alt="logo" width={160} height={40} />
+              <Image src="/topmintLogo.png" className="theLogo" alt="logo" width={160} height={40} style={{ height: 'auto' }} />
             </Link>
           <div className="panelPrfileDisp">
             <div
@@ -482,14 +414,6 @@ export default function DashboardAdmin() {
 
             <li className={profilestate === "Users" ? "active" : ""} onClick={() => setProfileState("Users")}>
               <i className="icofont-users-alt-3"></i> Users {activeUsers.length > 0 && <span>{activeUsers.length}</span>}
-            </li>
-
-            <li className="chatLink" onClick={() => { setProfileState("Chats"); }}>
-              <i className="icofont-chat"></i> Chat {unreadMessages > 0 && <span>{unreadMessages}</span>}
-            </li>
-
-            <li className={profilestate === "Chats" ? "active" : ""} onClick={() => setProfileState("Chats")}>
-              <i className="icofont-chat"></i> Admin Chats {unreadMessages > 0 && <span>{unreadMessages}</span>}
             </li>
 
             <li className={profilestate === "Loans" ? "active" : ""} onClick={() => setProfileState("Loans")}>
@@ -634,9 +558,6 @@ export default function DashboardAdmin() {
             withdrawData={withdrawData}
           />
         )}
-        {profilestate === "Chats" && (
-          <AdminChat />
-        )}
         {profilestate === "Loans" && (
           <LoansAdmin setProfileState={setProfileState} currentUser={currentUser} />
         )}
@@ -708,7 +629,7 @@ export default function DashboardAdmin() {
           >
             <div className="topmostRightPrile">
               <Link href={"/"}>
-                <img src="/topmintLogo.png" className="theLogo" alt="logo" />
+                <img src="/topmintLogo.png" className="theLogo" alt="logo" style={{ height: 'auto', width: '160px' }} />
               </Link>
               <div className="panelPrfileDisp">
                 <div
@@ -752,9 +673,6 @@ export default function DashboardAdmin() {
                         .length
                     }
                   </span>
-                </li>
-                <li className={profilestate === "Chats" ? "active" : ""} onClick={() => setProfileState("Chats")}>
-                  <i className="icofont-chat"></i> Admin Chats {unreadMessages > 0 && <span>{unreadMessages}</span>}
                 </li>
                 <li className={profilestate === "Loans" ? "active" : ""} onClick={() => setProfileState("Loans")}>
                   <i className="icofont-wallet"></i> Loans

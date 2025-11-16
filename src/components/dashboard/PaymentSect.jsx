@@ -1,11 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { db } from "../../database/firebaseConfig";
-import { doc, addDoc, collection } from "firebase/firestore";
+import { supabaseDb } from "../../database/supabaseUtils";
 
 const PaymentSect = ({setProfileState, investData, bitPrice, ethPrice}) => {
     const [copystate, setCopystate] = useState("Copy");
-
-    const colRef = collection(db, "investments");
 
     // Debug logging for prices
     useEffect(() => {
@@ -46,8 +43,30 @@ const PaymentSect = ({setProfileState, investData, bitPrice, ethPrice}) => {
           });
     }
 
-    const handleTransacConfirmation = () => {
-        addDoc(colRef, {...investData, bonus: investData?.plan === "Silver" ? investData?.capital*5 : investData?.plan === "Gold" ? investData?.capital*8 : investData?.capital*10});
+    const handleTransacConfirmation = async () => {
+        // Ensure the investment is created with "Pending" status and no pre-calculated bonus
+        const investmentToCreate = {
+            ...investData,
+            status: "Pending", // Explicitly set status to Pending
+            roi: 0, // Will be calculated during admin approval
+            bonus: 0, // Will be calculated during admin approval
+            credited_roi: 0, // Track credited amounts
+            credited_bonus: 0
+        };
+
+        console.log('Creating investment with pending status:', investmentToCreate);
+
+        const { data, error } = await supabaseDb.createInvestment(investmentToCreate);
+        if (error) {
+            console.error('Error creating investment:', error);
+            alert('Error creating investment. Please try again.');
+            return;
+        }
+
+        console.log('Investment created successfully with ID:', data?.id);
+        alert('✅ Investment submitted successfully! Your investment is now pending admin approval. You can check the status in your Investment History.');
+
+        // Redirect to investments section to show the pending investment
         setProfileState("Investments");
     }
   return (

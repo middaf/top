@@ -7,7 +7,7 @@ const Footer = () => {
     <footer className='homefooter'>
       <div className="firstFooterSect">
         <div className="topper">
-            <Image src="/topmintLogo.png" alt="company logo" width={160} height={40} />
+            <Image src="/topmintLogo.png" alt="company logo" width={160} height={40} style={{ height: 'auto' }} />
             <span></span>
             <div className="socials_1">
                 <a href="https://twitter.com/topmintofficial"><Image src="/twitter.svg" alt="twitter" width={24} height={24} /></a>

@@ -177,6 +177,47 @@
   border-color: var(--primary-clr);
 }
 
+/* Action Buttons */
+.actionButtons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.actionButtons button {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 60px;
+}
+
+.actionButtons button.verify {
+  background: #4CAF50;
+  color: white;
+}
+
+.actionButtons button.verify:hover {
+  background: #45a049;
+}
+
+.actionButtons button.reject {
+  background: #F44336;
+  color: white;
+}
+
+.actionButtons button.reject:hover {
+  background: #da190b;
+}
+
+.actionButtons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Dashboard Stats */
 .dashboardStats {
   display: grid;

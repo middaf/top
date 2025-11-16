@@ -1,7 +1,7 @@
 import {useEffect, useState} from "react";
 import { useRouter } from "next/router";
-import { db } from "../../database/firebaseConfig";
-import { doc, where, collection, query, onSnapshot } from "firebase/firestore";
+import { supabaseDb, supabaseRealtime } from "../../database/supabaseUtils";
+import { supabase } from "../../database/supabaseConfig";
 
 const WithdrawalSect = ({currentUser, setWidgetState, totalBonus, totalCapital, totalROI, setProfileState, setWithdrawData}) => {
     const router = useRouter();
@@ -12,26 +12,121 @@ const WithdrawalSect = ({currentUser, setWidgetState, totalBonus, totalCapital, 
     const [bankAccountNumber, setBankAccountNumber] = useState('');
     const [bankAccountName, setBankAccountName] = useState('');
     const [bankRoutingSwift, setBankRoutingSwift] = useState('');
-    const [showCodeNotification, setShowCodeNotification] = useState(false);
-    const colRefWith = collection(db, "withdrawals");
-    const q3 = query(colRefWith, where("idnum", "==", currentUser?.idnum));
-
+    const [kycStatus, setKycStatus] = useState('pending');
+    const normalizedKycStatus = (kycStatus || '').toLowerCase();
+    const isKycVerified = normalizedKycStatus === 'verified';
     useEffect(() => {
-      const unsubscribe = onSnapshot(q3, (snapshot) => {
-        const utilNotif = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
-        setWithdrawals(utilNotif);
-      });
+      const fetchWithdrawals = async () => {
+        if (!currentUser?.idnum) return;
+        
+        try {
+          const { data, error } = await supabaseDb.getWithdrawalsByIdnum(currentUser.idnum);
+          if (!error && data) {
+            setWithdrawals(data);
+          }
+        } catch (err) {
+          console.error('Error calling getWithdrawalsByIdnum:', err);
+        }
+      };
 
-      return () => unsubscribe();
-    }, [q3]);
+      const fetchKycStatus = async () => {
+        console.log('Fetching KYC status for user:', currentUser?.id);
+        if (!currentUser?.id) {
+          console.log('No user ID available for KYC fetch');
+          return;
+        }
+        
+        try {
+          const { data, error } = await supabaseDb.getKYCByUserId(currentUser.id);
+          console.log('KYC fetch result:', { data, error });
+                    if (!error && data && data.length > 0) {
+                        const status = (data[0].status || 'pending').toLowerCase();
+                        console.log('Setting KYC status to:', status);
+                        setKycStatus(status);
+          } else {
+            console.log('No KYC data found, setting to pending');
+            setKycStatus('pending');
+          }
+        } catch (err) {
+          console.error('Error fetching KYC status:', err);
+          setKycStatus('pending');
+        }
+      };
+
+      fetchWithdrawals();
+      fetchKycStatus();
+
+      // Set up real-time subscriptions
+      let withdrawalsSubscription = null;
+      let kycSubscription = null;
+      
+      if (currentUser?.idnum) {
+        withdrawalsSubscription = supabaseRealtime.subscribeToWithdrawals(currentUser.idnum, (payload) => {
+          console.log('Withdrawal change:', payload);
+          // Refresh withdrawals when there's a change
+          fetchWithdrawals();
+        });
+      }
+
+      if (currentUser?.id) {
+        kycSubscription = supabase
+          .channel('user-kyc-withdrawal')
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'kyc',
+            filter: `user_id=eq.${currentUser.id}`
+          }, (payload) => {
+            console.log('🔄 KYC status change in withdrawal:', payload);
+            if (payload.new) {
+              const newStatus = (payload.new.status || 'pending').toLowerCase();
+              console.log('📝 Updating KYC status in WithdrawalSect to:', newStatus);
+              setKycStatus(newStatus);
+            } else if (payload.eventType === 'DELETE') {
+              console.log('🗑️ KYC deleted, setting to pending');
+              setKycStatus('pending');
+            }
+          })
+          .subscribe();
+      }
+
+      return () => {
+        if (withdrawalsSubscription) withdrawalsSubscription.unsubscribe();
+        if (kycSubscription) kycSubscription.unsubscribe();
+      };
+    }, [currentUser?.idnum]);
 
   return (
     <div className='widthdrawMainSect'>
         <div className="topmostWithdraw">
-            <h2>Total Balance: <span>${`${(parseFloat(currentUser?.balance || 0) + parseFloat(currentUser?.bonus || 0)).toLocaleString()}`}</span></h2>
+            <h2 style={{ color: '#F3F9FF', fontSize: '1.5em' }}>
+              Total Balance:
+              <span style={{ color: '#0672CD', fontWeight: 'bold' }}>
+                ${(() => {
+                  // Calculate total available balance like in the profile dashboard
+                  const userBalance = parseFloat(currentUser?.balance || 0);
+                  const capital = parseFloat(totalCapital || 0);
+                  const roi = parseFloat(totalROI || 0);
+                  const bonus = parseFloat(totalBonus || 0);
+                  const total = userBalance + capital + roi + bonus;
+                  console.log('Withdrawal balance calculation:', {
+                    userBalance,
+                    capital: totalCapital,
+                    roi: totalROI,
+                    bonus: totalBonus,
+                    total,
+                    currentUser
+                  });
+                  return total.toLocaleString();
+                })()}
+              </span>
+              {!currentUser?.balance && currentUser?.balance !== 0 && (
+                <span style={{fontSize: '0.8rem', color: '#999', marginLeft: '10px'}}>(Loading...)</span>
+              )}
+            </h2>
             
             {/* KYC Status Indicator */}
-            {(!currentUser?.kycStatus || currentUser?.kycStatus !== 'verified') && (
+            {!isKycVerified && (
                 <div style={{
                     backgroundColor: 'rgba(220, 18, 98, 0.1)',
                     border: '2px solid var(--danger-clr)',
@@ -77,6 +172,60 @@ const WithdrawalSect = ({currentUser, setWidgetState, totalBonus, totalCapital, 
                     >
                         Click here to complete your KYC
                     </button>
+                </div>
+            )}
+            
+            {/* KYC Verified Indicator */}
+            {isKycVerified && (
+                <div style={{
+                    background: 'linear-gradient(135deg, #067c4d 0%, #0a9b6b 100%)',
+                    border: '2px solid #067c4d',
+                    borderRadius: '12px',
+                    padding: '1.2rem',
+                    marginBottom: '1.5rem',
+                    marginTop: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    boxShadow: '0 4px 15px rgba(6, 124, 77, 0.3)',
+                    animation: 'fadeIn 0.5s ease-in-out',
+                    maxWidth: '600px'
+                }}>
+                    <div style={{
+                        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                        borderRadius: '50%',
+                        width: '50px',
+                        height: '50px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                    }}>
+                        <i className="icofont-check" style={{ 
+                            fontSize: '1.8rem', 
+                            color: 'white',
+                            fontWeight: 'bold'
+                        }}></i>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <h3 style={{ 
+                            color: 'white', 
+                            margin: '0 0 0.3rem 0', 
+                            fontSize: '1.2rem',
+                            fontWeight: 'bold',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                        }}>
+                            ✅ KYC Successfully Verified!
+                        </h3>
+                        <p style={{ 
+                            color: 'rgba(255, 255, 255, 0.9)', 
+                            margin: 0, 
+                            fontSize: '0.95rem',
+                            lineHeight: '1.4'
+                        }}>
+                            Your identity has been verified. You can now make withdrawals and access all platform features without restrictions.
+                        </p>
+                    </div>
                 </div>
             )}
             
@@ -166,7 +315,7 @@ const WithdrawalSect = ({currentUser, setWidgetState, totalBonus, totalCapital, 
                 </div>
                 <button type="button" onClick={() => {
                     // Check KYC status first
-                    if (!currentUser?.kycStatus || currentUser?.kycStatus !== 'verified') {
+                    if (!isKycVerified) {
                         alert('KYC verification required. Please complete KYC verification in the Profile section before making a withdrawal.');
                         return;
                     }
@@ -187,9 +336,15 @@ const WithdrawalSect = ({currentUser, setWidgetState, totalBonus, totalCapital, 
                             return;
                         }
                     }
-                    const totalBalance = parseFloat(currentUser?.balance || 0) + parseFloat(currentUser?.bonus || 0);
+                    const totalBalance = (() => {
+                        const userBalance = parseFloat(currentUser?.balance || 0);
+                        const capital = parseFloat(totalCapital || 0);
+                        const roi = parseFloat(totalROI || 0);
+                        const bonus = parseFloat(totalBonus || 0);
+                        return userBalance + capital + roi + bonus;
+                    })();
                     if (amt > totalBalance) {
-                        alert('Withdrawal amount cannot exceed your total balance');
+                        alert(`Withdrawal amount cannot exceed your total balance of $${totalBalance.toLocaleString()}`);
                         return;
                     }
                     // Go directly to Withdrawal Payment page with data
@@ -220,6 +375,7 @@ const WithdrawalSect = ({currentUser, setWidgetState, totalBonus, totalCapital, 
                     fontSize: '1rem',
                     cursor: 'pointer'
                 }}>Proceed with withdrawal</button>
+                
             </div>
         </div>
         {
@@ -273,52 +429,6 @@ const WithdrawalSect = ({currentUser, setWidgetState, totalBonus, totalCapital, 
             </div>
         </div>
 
-        {/* Notification modal after requesting withdrawal code */}
-        {showCodeNotification && (
-            <div style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 1000
-            }}>
-                <div style={{
-                    backgroundColor: '#fff',
-                    borderRadius: 8,
-                    padding: 24,
-                    maxWidth: 400,
-                    textAlign: 'center',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
-                }}>
-                    <h2>Withdrawal Code Requested</h2>
-                    <p style={{margin: '16px 0', color: '#666'}}>
-                        Your withdrawal code request has been sent to the admin. You will receive your code via the chat within 24 hours.
-                    </p>
-                    <div style={{display: 'flex', gap: 8, marginTop: 24}}>
-                        <button
-                            onClick={() => {
-                                setShowCodeNotification(false);
-                                window.dispatchEvent(new CustomEvent('openChatBot', { detail: {} }));
-                            }}
-                            style={{flex: 1, padding: '10px 16px', backgroundColor: '#f9f871', border: 'none', borderRadius: 6, cursor: 'pointer'}}
-                        >
-                            Contact Admin
-                        </button>
-                        <button
-                            onClick={() => setShowCodeNotification(false)}
-                            style={{flex: 1, padding: '10px 16px', backgroundColor: '#ddd', border: 'none', borderRadius: 6, cursor: 'pointer'}}
-                        >
-                            Close
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
     </div>
   )
 }

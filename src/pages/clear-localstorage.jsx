@@ -13,15 +13,14 @@ export default function ClearLocalStoragePage() {
       localStorage.clear();
       sessionStorage.clear();
 
-      // Attempt to sign out firebase auth if available (best-effort)
-      // This won't break the page if firebase isn't loaded.
+      // Attempt to sign out Supabase auth if available (best-effort)
+      // This won't break the page if Supabase isn't loaded.
       try {
         // dynamic import to avoid SSR issues
-        import('firebase/auth')
-          .then(({ getAuth, signOut }) => {
+        import('../database/supabaseConfig')
+          .then(({ supabase }) => {
             try {
-              const auth = getAuth();
-              signOut(auth).catch(() => {});
+              supabase.auth.signOut().catch(() => {});
             } catch (e) {}
           })
           .catch(() => {});

@@ -3,8 +3,7 @@ import { useState, useContext, useEffect, useLayoutEffect} from 'react';
 import { themeContext } from '../../../providers/ThemeProvider';
 import Link from 'next/link';
 import Image from 'next/image';
-import { db } from '../../database/firebaseConfig';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { supabaseDb } from '../../database/supabaseUtils';
 import styles from './Navbar.module.css';
 
 const Navbar = ({ showsidecard, setShowsideCard, shownavOptions, showDisplayCard }) => {
@@ -30,21 +29,22 @@ const Navbar = ({ showsidecard, setShowsideCard, shownavOptions, showDisplayCard
         if (!currentUser?.id) return;
 
         try {
-            const q = query(collection(db, 'chats'), orderBy('timestamp', 'desc'));
-            const unsub = onSnapshot(q, (snapshot) => {
-                const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                if (currentUser?.admin) {
-                    // Admin sees unread user messages
-                    const userMsgs = docs.filter(m => !m.isAdmin).length;
-                    setUnreadChats(userMsgs);
-                } else {
-                    // Regular user sees unread admin messages
-                    const adminMsgs = docs.filter(m => m.isAdmin).length;
-                    setUnreadChats(adminMsgs);
-                }
+            // Initial count
+            supabaseDb.getChatCounts(currentUser.id, currentUser.admin).then(count => {
+                setUnreadChats(count);
             });
 
-            return () => unsub();
+            // Subscribe to real-time updates
+            const unsubscribe = supabaseDb.subscribeToChatMessages(currentUser.id, () => {
+                // Refresh count when messages change
+                supabaseDb.getChatCounts(currentUser.id, currentUser.admin).then(count => {
+                    setUnreadChats(count);
+                });
+            });
+
+            return () => {
+                if (unsubscribe) unsubscribe();
+            };
         } catch (err) {
             console.error('Chat badge listener error', err);
         }
@@ -97,7 +97,14 @@ const Navbar = ({ showsidecard, setShowsideCard, shownavOptions, showDisplayCard
             shownavOptions && (
                 <div id="mobilenone" className="centerBox">
                     <a  href="#about">About Us</a>
-                    <a  href="#packages">Our Packages</a>
+                    <a onClick={() => {
+                        const user = JSON.parse(sessionStorage.getItem("activeUser") || localStorage.getItem("activeUser") || "null");
+                        if (user?.id) {
+                            window.location.href = "/profile#packages";
+                        } else {
+                            window.location.href = "/signin";
+                        }
+                    }} style={{cursor: 'pointer'}}>Our Packages</a>
                     <Link  href={"/contact"}>Contact</Link>
                 </div>
             )
